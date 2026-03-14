@@ -140,6 +140,77 @@ button.danger {
   font-weight: 600;
 }
 
+.cooking-screen {
+  gap: var(--space-2);
+  padding-bottom: 116px;
+}
+
+.cooking-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.secondary-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.compact-card {
+  padding: 10px 12px;
+}
+
+.compact-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+button.inline-btn {
+  width: auto;
+  padding: 8px 10px;
+  font-size: 0.9rem;
+  border: 1px solid var(--border);
+  background: #f2f2f2;
+}
+
+button.inline-btn.secondary {
+  background: #f2f2f2;
+}
+
+button.inline-btn.danger-link {
+  color: var(--danger);
+  background: #fff;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.action-bar {
+  position: sticky;
+  bottom: 10px;
+  z-index: 5;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+}
+
+.action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.action-grid .wide {
+  grid-column: 1 / -1;
+}
+
 @media (min-width: 720px) {
   .button-row.two {
     grid-template-columns: repeat(2, 1fr);
