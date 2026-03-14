@@ -152,10 +152,20 @@ button.danger {
   gap: var(--space-2);
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
 .secondary-actions {
   display: flex;
   align-items: center;
   gap: var(--space-1);
+}
+
+.voice-hint {
+  margin-top: -4px;
 }
 
 .compact-card {
@@ -175,6 +185,17 @@ button.inline-btn {
   font-size: 0.9rem;
   border: 1px solid var(--border);
   background: #f2f2f2;
+}
+
+button.inline-btn.mic-toggle {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  border-radius: 999px;
 }
 
 button.inline-btn.secondary {

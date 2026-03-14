@@ -7,7 +7,9 @@ const appState = {
   activeTimerSeconds: null,
   timerPaused: false,
   voiceListening: false,
-  lastSpokenCookingIndex: null
+  lastSpokenCookingIndex: null,
+  voiceHintMessage: "",
+  voiceHintTimeoutId: null
 };
 
 const appEl = document.getElementById("app");
@@ -207,19 +209,15 @@ function startVoiceCommands() {
 
     voiceRecognition.onerror = () => {
       appState.voiceListening = false;
-      const status = document.getElementById("voiceStatus");
-      if (status) {
-        status.textContent = "Voice: Unavailable";
+      setVoiceHint("Voice unavailable in this browser.", 2500);
+      if (appState.currentScreen === "cooking") {
+        renderCooking();
       }
     };
   }
 
   appState.voiceListening = true;
   voiceRecognition.start();
-  const status = document.getElementById("voiceStatus");
-  if (status) {
-    status.textContent = "Voice: On";
-  }
 }
 
 function stopVoiceCommands() {
@@ -233,11 +231,27 @@ function stopVoiceCommands() {
       }
     };
   }
+}
 
-  const status = document.getElementById("voiceStatus");
-  if (status && appState.currentScreen === "cooking") {
-    status.textContent = "Voice: Off";
+function setVoiceHint(message, timeoutMs = 2500) {
+  appState.voiceHintMessage = message;
+
+  if (appState.voiceHintTimeoutId) {
+    window.clearTimeout(appState.voiceHintTimeoutId);
   }
+
+  if (!timeoutMs) {
+    appState.voiceHintTimeoutId = null;
+    return;
+  }
+
+  appState.voiceHintTimeoutId = window.setTimeout(() => {
+    appState.voiceHintMessage = "";
+    appState.voiceHintTimeoutId = null;
+    if (appState.currentScreen === "cooking") {
+      renderCooking();
+    }
+  }, timeoutMs);
 }
 
 function createButton(label, className, onClick) {
@@ -530,6 +544,32 @@ function renderCooking() {
   meta.className = "meta";
   meta.textContent = `Step ${idx + 1} of ${total}`;
 
+  const headerActions = document.createElement("div");
+  headerActions.className = "header-actions";
+
+  const micButton = createInlineButton(
+    appState.voiceListening ? "🎤" : "🔇",
+    "mic-toggle",
+    () => {
+      if (appState.voiceListening) {
+        stopVoiceCommands();
+      } else {
+        startVoiceCommands();
+        setVoiceHint("Voice commands enabled. Say: Next, Repeat, Pause.", 2800);
+      }
+      renderCooking();
+    }
+  );
+  micButton.type = "button";
+  micButton.disabled = !SpeechRecognition;
+  micButton.setAttribute(
+    "aria-label",
+    appState.voiceListening ? "Turn off voice commands" : "Turn on voice commands"
+  );
+  micButton.title = appState.voiceListening ? "Voice On" : "Voice Off";
+
+  headerActions.appendChild(micButton);
+
   const secondaryActions = document.createElement("div");
   secondaryActions.className = "secondary-actions";
   const previousBtn = createInlineButton("Previous", "secondary", () => goToPreviousCookingStep());
@@ -539,39 +579,17 @@ function renderCooking() {
     createInlineButton("Stop", "danger-link", () => stopCookingFlow(true))
   );
 
-  topRow.append(meta, secondaryActions);
+  topRow.append(meta, headerActions);
   screen.appendChild(topRow);
 
-  const voiceCard = createCard();
-  voiceCard.classList.add("compact-card");
-  const voiceRow = document.createElement("div");
-  voiceRow.className = "compact-row";
-  const voiceStatus = document.createElement("p");
-  voiceStatus.className = "meta";
-  voiceStatus.id = "voiceStatus";
-  if (!SpeechRecognition) {
-    voiceStatus.textContent = "Voice: Unavailable";
-  } else {
-    voiceStatus.textContent = appState.voiceListening ? "Voice: On" : "Voice: Off";
+  if (appState.voiceHintMessage) {
+    const hint = document.createElement("p");
+    hint.className = "small voice-hint";
+    hint.textContent = appState.voiceHintMessage;
+    screen.appendChild(hint);
   }
 
-  const voiceToggleBtn = createInlineButton(
-    appState.voiceListening ? "Turn Off" : "Turn On",
-    "secondary",
-    () => {
-      if (appState.voiceListening) {
-        stopVoiceCommands();
-      } else {
-        startVoiceCommands();
-      }
-      renderCooking();
-    }
-  );
-  voiceToggleBtn.disabled = !SpeechRecognition;
-
-  voiceRow.append(voiceStatus, voiceToggleBtn);
-  voiceCard.appendChild(voiceRow);
-  screen.appendChild(voiceCard);
+  screen.appendChild(secondaryActions);
 
   const card = createCard();
   const instruction = document.createElement("p");
@@ -648,7 +666,7 @@ function renderCooking() {
     actionGrid.append(
       createButton("Repeat", "", () => repeatCurrentCookingStep()),
       createButton("Next", "primary", () => goToNextCookingStep()),
-      createButton("Pause", "wide", () => {
+      createButton("Pause Cooking", "wide", () => {
         toggleGuidancePause();
         renderCooking();
       })
