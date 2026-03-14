@@ -335,27 +335,45 @@ function renderAnalysis() {
 
   const screen = clearAndSetScreenTitle("Recipe Analysis", "Review parsed steps before cooking");
 
-  const titleCard = createCard();
+  const summaryCard = createCard();
   const recipeTitle = document.createElement("h2");
   recipeTitle.textContent = appState.recipe.title;
-  titleCard.appendChild(recipeTitle);
-  screen.appendChild(titleCard);
 
-  const stepsCard = createCard();
-  const stepsHeading = document.createElement("p");
-  stepsHeading.className = "meta";
-  stepsHeading.textContent = "Detected cooking steps";
-  const ol = document.createElement("ol");
-  ol.className = "list";
+  const summaryList = document.createElement("ul");
+  summaryList.className = "list";
 
-  appState.recipe.cookingSteps.forEach((step) => {
-    const li = document.createElement("li");
-    li.textContent = step.text;
-    ol.appendChild(li);
-  });
+  const ingredientCount = document.createElement("li");
+  ingredientCount.textContent = `${appState.recipe.ingredients.length} ingredients`;
 
-  stepsCard.append(stepsHeading, ol);
-  screen.appendChild(stepsCard);
+  const prepCount = document.createElement("li");
+  prepCount.textContent = `${appState.recipe.preparationSteps.length} preparation steps`;
+
+  const cookingCount = document.createElement("li");
+  cookingCount.textContent = `${appState.recipe.cookingSteps.length} cooking steps`;
+
+  summaryList.append(ingredientCount, prepCount, cookingCount);
+  summaryCard.append(recipeTitle, summaryList);
+  screen.appendChild(summaryCard);
+
+  const previewCount = Math.min(3, appState.recipe.cookingSteps.length);
+  if (previewCount > 0) {
+    const previewCard = createCard();
+    const previewHeading = document.createElement("p");
+    previewHeading.className = "meta";
+    previewHeading.textContent = "Quick cooking preview";
+
+    const previewList = document.createElement("ol");
+    previewList.className = "list";
+
+    appState.recipe.cookingSteps.slice(0, previewCount).forEach((step) => {
+      const item = document.createElement("li");
+      item.textContent = step.text;
+      previewList.appendChild(item);
+    });
+
+    previewCard.append(previewHeading, previewList);
+    screen.appendChild(previewCard);
+  }
 
   const actions = document.createElement("div");
   actions.className = "button-row";
