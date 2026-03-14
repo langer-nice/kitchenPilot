@@ -1,5 +1,41 @@
 const OPENAI_API_URL = "https://api.openai.com/v1/responses";
 
+function setCorsHeaders(res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+}
+
+async function parseRequestBody(req) {
+  if (req.body && typeof req.body === "object") {
+    return req.body;
+  }
+
+  if (typeof req.body === "string") {
+    try {
+      return JSON.parse(req.body);
+    } catch {
+      throw createApiError("Invalid JSON body", 400, "invalid_json_body");
+    }
+  }
+
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(chunk);
+  }
+
+  if (!chunks.length) {
+    return {};
+  }
+
+  const raw = Buffer.concat(chunks).toString("utf8");
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw createApiError("Invalid JSON body", 400, "invalid_json_body");
+  }
+}
+
 function createApiError(message, statusCode, code) {
   const error = new Error(message || "Recipe parsing failed");
   if (statusCode) {
@@ -181,14 +217,33 @@ async function parseWithOpenAI(recipeText) {
   }
 }
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
+  setCorsHeaders(res);
+
+  if (req.method === "OPTIONS") {
+    res.status(204).end();
+    return;
+  }
+
+  console.log("[api/parse-recipe] Request received", {
+    method: req.method,
+    host: req.headers.host,
+    origin: req.headers.origin || "n/a"
+  });
+
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;
   }
 
   try {
-    const recipeText = req.body?.recipeText;
+    const body = await parseRequestBody(req);
+    const recipeText = body?.recipeText;
+
+    console.log("[api/parse-recipe] Body parsed", {
+      hasRecipeText: Boolean(recipeText),
+      recipeTextLength: typeof recipeText === "string" ? recipeText.length : 0
+    });
 
     if (!recipeText || typeof recipeText !== "string") {
       res.status(400).json({ error: "recipeText is required" });
@@ -202,7 +257,7 @@ module.exports = async function handler(req, res) {
     const message = error && error.message ? error.message : "Recipe parsing failed";
 
     if (error.code === "missing_api_key" || message.includes("OPENAI_API_KEY")) {
-      res.status(503).json({ error: "Missing OPENAI_API_KEY. Set it in your terminal before running npm start." });
+      res.status(503).json({ error: "Missing OPENAI_API_KEY. Add it in your Vercel Project Settings > Environment Variables and redeploy." });
       return;
     }
 
@@ -223,4 +278,7 @@ module.exports = async function handler(req, res) {
 
     res.status(error.statusCode || 500).json({ error: message });
   }
-};
+}
+
+module.exports = handler;
+module.exports.default = handler;

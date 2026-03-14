@@ -1,6 +1,9 @@
 async function parseRecipeText(recipeText) {
   try {
-    const API_BASE_URL = window.KITCHENPILOT_API_BASE_URL || "http://localhost:3000";
+    const isLiveServerLocal =
+      (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") &&
+      window.location.port === "5500";
+    const API_BASE_URL = window.KITCHENPILOT_API_BASE_URL || (isLiveServerLocal ? "http://localhost:3000" : "");
     const endpoint = `${API_BASE_URL}/api/parse-recipe`;
 
     const response = await fetch(endpoint, {
