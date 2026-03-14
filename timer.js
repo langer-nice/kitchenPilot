@@ -3,6 +3,14 @@ let remainingSeconds = 0;
 let onTick = null;
 let onDone = null;
 let isPaused = false;
+let status = "idle";
+
+function setStatus(nextStatus, reason) {
+  if (status !== nextStatus) {
+    console.log(`[timer] ${status} -> ${nextStatus}${reason ? ` (${reason})` : ""}`);
+    status = nextStatus;
+  }
+}
 
 function startTimer(seconds, tickCallback, doneCallback) {
   stopTimer();
@@ -17,11 +25,14 @@ function startTimer(seconds, tickCallback, doneCallback) {
   }
 
   if (remainingSeconds <= 0) {
+    setStatus("completed", "startTimer with non-positive seconds");
     if (onDone) {
       onDone();
     }
     return;
   }
+
+  setStatus("running", "startTimer");
 
   timerIntervalId = window.setInterval(() => {
     if (isPaused) {
@@ -45,10 +56,14 @@ function startTimer(seconds, tickCallback, doneCallback) {
 
 function pauseTimer() {
   isPaused = true;
+  setStatus("paused", "pauseTimer");
 }
 
 function resumeTimer() {
   isPaused = false;
+  if (timerIntervalId) {
+    setStatus("running", "resumeTimer");
+  }
 }
 
 function stopTimer() {
@@ -58,12 +73,14 @@ function stopTimer() {
   timerIntervalId = null;
   remainingSeconds = 0;
   isPaused = false;
+  setStatus("idle", "stopTimer");
 }
 
 function getTimerState() {
   return {
     remainingSeconds,
     isPaused,
-    isRunning: Boolean(timerIntervalId)
+    isRunning: Boolean(timerIntervalId),
+    status
   };
 }

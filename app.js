@@ -4,6 +4,7 @@ const appState = {
   preparationIndex: 0,
   cookingIndex: 0,
   timerMessage: "",
+  timerStatus: "idle",
   activeTimerSeconds: null,
   timerPaused: false,
   voiceListening: false,
@@ -16,6 +17,13 @@ const appState = {
 const appEl = document.getElementById("app");
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let voiceRecognition = null;
+
+function setTimerStatus(nextStatus, reason) {
+  if (appState.timerStatus !== nextStatus) {
+    console.log(`[timer-state] ${appState.timerStatus} -> ${nextStatus}${reason ? ` (${reason})` : ""}`);
+    appState.timerStatus = nextStatus;
+  }
+}
 
 function isGuidanceScreen(screenName) {
   return screenName === "cooking" || screenName === "timerActive";
@@ -33,6 +41,7 @@ function setScreen(screenName) {
 
   if (!isGuidanceScreen(screenName)) {
     appState.timerMessage = "";
+    setTimerStatus("idle", `leaving guidance to ${screenName}`);
     appState.activeTimerSeconds = null;
     appState.timerPaused = false;
     appState.lastSpokenCookingIndex = null;
@@ -137,6 +146,7 @@ function goToNextCookingStep() {
   if (appState.cookingIndex < appState.recipe.cookingSteps.length - 1) {
     appState.cookingIndex += 1;
     appState.activeTimerSeconds = null;
+    setTimerStatus("idle", "next step");
     appState.timerSkippedStepIndex = null;
     renderCooking();
   } else {
@@ -164,6 +174,7 @@ function goToPreviousCookingStep() {
   if (appState.cookingIndex > 0) {
     appState.cookingIndex -= 1;
     appState.activeTimerSeconds = null;
+    setTimerStatus("idle", "previous step");
     appState.timerSkippedStepIndex = null;
     renderCooking();
   }
@@ -173,7 +184,10 @@ function skipActiveTimer() {
   stopTimer();
   appState.activeTimerSeconds = 0;
   appState.timerMessage = "Timer skipped";
+  appState.timerPaused = false;
+  setTimerStatus("skipped", "skip active timer");
   appState.timerSkippedStepIndex = appState.cookingIndex;
+  console.log("[timer-state] Skip applied for step", appState.cookingIndex + 1);
   const notice = document.getElementById("timerNotice");
   const display = document.getElementById("timerDisplay");
   if (notice) {
@@ -198,10 +212,12 @@ function toggleGuidancePause() {
       resumeTimer();
       appState.timerPaused = false;
       appState.timerMessage = "Timer running";
+      setTimerStatus("running", "guidance resume");
     } else {
       pauseTimer();
       appState.timerPaused = true;
       appState.timerMessage = "Timer paused";
+      setTimerStatus("paused", "guidance pause");
     }
   } else {
     appState.timerMessage = "Guidance paused";
@@ -255,6 +271,30 @@ function handleVoiceCommand(commandText) {
 
   if (command.includes("pause")) {
     toggleGuidancePause();
+    return;
+  }
+
+  if (command.includes("start") && command.includes("timer")) {
+    const step = getCurrentCookingStep();
+    const hasTimer = step && Number.isInteger(step.timerSeconds) && step.timerSeconds > 0;
+
+    if (!hasTimer) {
+      setVoiceHint("This step has no timer.", 1800);
+      return;
+    }
+
+    if (appState.timerStatus === "paused") {
+      resumeTimer();
+      appState.timerPaused = false;
+      appState.timerMessage = "Timer running";
+      setTimerStatus("running", "voice start timer resume");
+    } else if (appState.timerStatus === "idle") {
+      startStepTimerIfNeeded(step);
+    }
+
+    if (appState.currentScreen === "timerActive") {
+      renderTimerActive();
+    }
     return;
   }
 
@@ -594,11 +634,14 @@ function startStepTimerIfNeeded(step) {
     appState.activeTimerSeconds = null;
     appState.timerMessage = "";
     appState.timerPaused = false;
+    setTimerStatus("idle", "step has no timer");
     return;
   }
 
   appState.timerMessage = "Timer running";
   appState.timerPaused = false;
+  setTimerStatus("running", "auto start step timer");
+  console.log("[timer-state] Starting timer for step", appState.cookingIndex + 1, "seconds:", step.timerSeconds);
 
   startTimer(
     step.timerSeconds,
@@ -612,6 +655,8 @@ function startStepTimerIfNeeded(step) {
     () => {
       appState.activeTimerSeconds = 0;
       appState.timerMessage = "Timer finished";
+      appState.timerPaused = false;
+      setTimerStatus("completed", "timer done callback");
       const timerNotice = document.getElementById("timerNotice");
       if (timerNotice) {
         timerNotice.textContent = "Timer finished";
@@ -635,7 +680,7 @@ function ensureCurrentStepTimerStarted() {
   }
 
   const timerWasSkipped = appState.timerSkippedStepIndex === appState.cookingIndex;
-  if (timerWasSkipped) {
+  if (timerWasSkipped || appState.timerStatus === "skipped" || appState.timerStatus === "completed") {
     return;
   }
 
@@ -734,10 +779,13 @@ function renderCooking() {
   if (!hasTimer) {
     stopTimer();
     appState.activeTimerSeconds = null;
+    setTimerStatus("idle", "render cooking untimed step");
     if (appState.timerMessage === "Timer paused" || appState.timerMessage === "Timer running") {
       appState.timerMessage = "";
     }
     appState.timerPaused = false;
+  } else {
+    ensureCurrentStepTimerStarted();
   }
 
   if (appState.lastSpokenCookingIndex !== idx) {
@@ -758,20 +806,37 @@ function renderCooking() {
   actionRow.className = "action-row";
   actionRow.classList.add("timer-action-row");
 
-  actionRow.append(
-    createButton("Pause", "compact-btn", () => {
-      toggleGuidancePause();
-      renderCooking();
-    }),
-    createButton("Repeat", "compact-btn", () => repeatCurrentCookingStep()),
-    createButton(hasTimer ? "Start Timer" : "Next", "primary next-btn", () => {
-      if (hasTimer) {
-        setScreen("timerActive");
-      } else {
-        goToNextCookingStep();
-      }
-    })
-  );
+  if (hasTimer) {
+    const timerAllowsNext = appState.timerStatus === "completed" || appState.timerStatus === "skipped";
+    actionRow.append(
+      createButton("Pause", "compact-btn", () => {
+        toggleGuidancePause();
+        renderCooking();
+      }),
+      createButton("Repeat", "compact-btn", () => repeatCurrentCookingStep()),
+      createButton(
+        timerAllowsNext ? "Next" : "Skip Timer",
+        "primary next-btn",
+        () => {
+          if (timerAllowsNext) {
+            goToNextCookingStep();
+          } else {
+            skipActiveTimer();
+            renderCooking();
+          }
+        }
+      )
+    );
+  } else {
+    actionRow.append(
+      createButton("Pause", "compact-btn", () => {
+        toggleGuidancePause();
+        renderCooking();
+      }),
+      createButton("Repeat", "compact-btn", () => repeatCurrentCookingStep()),
+      createButton("Next", "primary next-btn", () => goToNextCookingStep())
+    );
+  }
 
   actionBar.appendChild(actionRow);
   screen.appendChild(actionBar);
@@ -887,15 +952,21 @@ function renderTimerActive() {
 
   ensureCurrentStepTimerStarted();
 
-  const readyForNext = canProceedFromTimerStep();
+  const readyForNext = appState.timerStatus === "completed" || appState.timerStatus === "skipped";
 
   const actionBar = document.createElement("div");
   actionBar.className = "action-bar";
   const actionRow = document.createElement("div");
   actionRow.className = "action-row";
 
-  const nextBtn = createButton("Next", "primary next-btn", () => goToNextCookingStep());
+  const nextBtn = createButton("Next", readyForNext ? "primary next-btn" : "compact-btn", () => goToNextCookingStep());
   nextBtn.disabled = !readyForNext;
+
+  const skipBtn = createButton("Skip Timer", readyForNext ? "compact-btn" : "primary compact-btn", () => {
+    skipActiveTimer();
+    renderTimerActive();
+  });
+  skipBtn.disabled = readyForNext;
 
   actionRow.append(
     createButton(appState.timerPaused ? "Resume" : "Pause", "compact-btn", () => {
@@ -903,10 +974,7 @@ function renderTimerActive() {
       renderTimerActive();
     }),
     createButton("Repeat", "compact-btn", () => repeatCurrentCookingStep()),
-    createButton("Skip Timer", "compact-btn", () => {
-      skipActiveTimer();
-      renderTimerActive();
-    }),
+    skipBtn,
     nextBtn
   );
 
