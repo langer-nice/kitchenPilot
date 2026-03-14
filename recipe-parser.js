@@ -1,18 +1,29 @@
-function parseRecipeInput(inputText, inputUrl) {
-  const hasText = Boolean(inputText && inputText.trim());
-  const hasUrl = Boolean(inputUrl && inputUrl.trim());
+async function parseRecipeText(recipeText) {
+  try {
+    const API_BASE_URL = window.KITCHENPILOT_API_BASE_URL || "http://localhost:3000";
+    const endpoint = `${API_BASE_URL}/api/parse-recipe`;
 
-  // Placeholder parser:
-  // In a real implementation, this is where AI or NLP parsing could transform
-  // unstructured recipe text/URL content into structured ingredients and steps.
-  // For now, return the bundled example recipe while preserving a custom title hint.
-  const recipe = JSON.parse(JSON.stringify(EXAMPLE_RECIPE));
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      body: JSON.stringify({
+        recipeText: recipeText
+      })
+    });
 
-  if (hasText) {
-    recipe.title = "Custom Pasted Recipe";
-  } else if (hasUrl) {
-    recipe.title = "Recipe From URL";
+    const payload = await response.json();
+
+    if (!response.ok) {
+      throw new Error(payload.error || "Recipe parsing request failed");
+    }
+
+    return payload;
+
+  } catch (error) {
+    console.error("Recipe parsing error:", error);
+    throw error;
   }
-
-  return recipe;
 }

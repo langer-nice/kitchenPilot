@@ -1,0 +1,226 @@
+const OPENAI_API_URL = "https://api.openai.com/v1/responses";
+
+function createApiError(message, statusCode, code) {
+  const error = new Error(message || "Recipe parsing failed");
+  if (statusCode) {
+    error.statusCode = statusCode;
+  }
+  if (code) {
+    error.code = code;
+  }
+  return error;
+}
+
+function extractResponseText(payload) {
+  if (payload && typeof payload.output_text === "string" && payload.output_text.trim()) {
+    return payload.output_text.trim();
+  }
+
+  const output = Array.isArray(payload && payload.output) ? payload.output : [];
+  for (const item of output) {
+    const content = Array.isArray(item && item.content) ? item.content : [];
+    for (const block of content) {
+      if (typeof block?.text === "string" && block.text.trim()) {
+        return block.text.trim();
+      }
+      if (typeof block?.output_text === "string" && block.output_text.trim()) {
+        return block.output_text.trim();
+      }
+    }
+  }
+
+  return "";
+}
+
+function findFirstJsonObject(text) {
+  if (!text) {
+    return "";
+  }
+
+  const source = String(text).trim();
+
+  // Fast path: already valid JSON.
+  try {
+    JSON.parse(source);
+    return source;
+  } catch {
+    // Continue to relaxed extraction.
+  }
+
+  // Remove markdown code fences if present.
+  const withoutFences = source
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
+
+  try {
+    JSON.parse(withoutFences);
+    return withoutFences;
+  } catch {
+    // Continue to object scanning.
+  }
+
+  let depth = 0;
+  let start = -1;
+
+  for (let i = 0; i < withoutFences.length; i += 1) {
+    const char = withoutFences[i];
+
+    if (char === "{") {
+      if (depth === 0) {
+        start = i;
+      }
+      depth += 1;
+      continue;
+    }
+
+    if (char === "}") {
+      if (depth > 0) {
+        depth -= 1;
+      }
+
+      if (depth === 0 && start >= 0) {
+        const candidate = withoutFences.slice(start, i + 1).trim();
+        try {
+          JSON.parse(candidate);
+          return candidate;
+        } catch {
+          // Keep scanning in case there is a later valid object.
+        }
+      }
+    }
+  }
+
+  return "";
+}
+
+function buildPrompt(recipeText) {
+  return `You are a recipe parser for a cooking assistant application.
+
+Convert the recipe text into structured JSON.
+
+Rules:
+- Return ONLY JSON
+- Split preparation steps and cooking steps
+- Each step must contain a single action
+- Detect cooking timers and convert them into timerSeconds
+- If no timer exists, omit timerSeconds
+
+Return exactly this format:
+
+{
+  "title": "string",
+  "ingredients": ["string"],
+  "preparationSteps": ["string"],
+  "cookingSteps": [
+    {
+      "text": "string",
+      "timerSeconds": number
+    }
+  ]
+}
+
+Recipe text:
+${recipeText}`;
+}
+
+async function parseWithOpenAI(recipeText) {
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    throw createApiError("Missing OPENAI_API_KEY environment variable", 503, "missing_api_key");
+  }
+
+  const response = await fetch(OPENAI_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: "gpt-4.1-mini",
+      input: buildPrompt(recipeText)
+    })
+  });
+
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    throw createApiError("OpenAI returned a non-JSON response", 502, "openai_invalid_response");
+  }
+
+  if (!response.ok) {
+    console.error("OpenAI API error payload:", payload);
+    throw createApiError(
+      payload.error?.message || "OpenAI request failed",
+      response.status,
+      payload.error?.code || "openai_request_failed"
+    );
+  }
+
+  const rawText = extractResponseText(payload);
+
+  if (!rawText) {
+    console.error("OpenAI response without output_text:", payload);
+    throw createApiError("AI returned an empty response", 502, "openai_empty_output");
+  }
+
+  const normalizedJsonText = findFirstJsonObject(rawText);
+
+  if (!normalizedJsonText) {
+    console.error("Failed to extract JSON from AI output:", rawText);
+    throw createApiError("AI returned invalid JSON", 502, "openai_invalid_json");
+  }
+
+  try {
+    return JSON.parse(normalizedJsonText);
+  } catch {
+    console.error("Failed to parse AI JSON output:", normalizedJsonText);
+    throw createApiError("AI returned invalid JSON", 502, "openai_invalid_json");
+  }
+}
+
+module.exports = async function handler(req, res) {
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  try {
+    const recipeText = req.body?.recipeText;
+
+    if (!recipeText || typeof recipeText !== "string") {
+      res.status(400).json({ error: "recipeText is required" });
+      return;
+    }
+
+    const parsedRecipe = await parseWithOpenAI(recipeText);
+    res.status(200).json(parsedRecipe);
+  } catch (error) {
+    console.error("Recipe parser endpoint failed:", error);
+    const message = error && error.message ? error.message : "Recipe parsing failed";
+
+    if (error.code === "missing_api_key" || message.includes("OPENAI_API_KEY")) {
+      res.status(503).json({ error: "Missing OPENAI_API_KEY. Set it in your terminal before running npm start." });
+      return;
+    }
+
+    if (error.code === "insufficient_quota") {
+      res.status(429).json({ error: "OpenAI quota exceeded. Check billing and usage limits." });
+      return;
+    }
+
+    if (error.code === "rate_limit_exceeded") {
+      res.status(429).json({ error: "OpenAI rate limit exceeded. Please retry in a moment." });
+      return;
+    }
+
+    if (error.code === "invalid_api_key") {
+      res.status(401).json({ error: "Invalid OPENAI_API_KEY. Update your key and restart the server." });
+      return;
+    }
+
+    res.status(error.statusCode || 500).json({ error: message });
+  }
+};

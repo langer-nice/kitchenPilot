@@ -1,0 +1,9 @@
+{
+  "name": "kitchenpilot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "KitchenPilot mobile-first prototype with local AI recipe parsing",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
