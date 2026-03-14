@@ -2,7 +2,7 @@ https://github.com/langer-nice/kitchenPilot
 
 
 Ingredients
-200g spaghetti
+300g spaghetti
 2 garlic cloves
 2 tbsp olive oil
 
@@ -14,9 +14,14 @@ Add the pasta and mix.
 
 
 
+unset OPENAI_API_KEY
+export OPENAI_API_KEY="sk-...YOUR_NEW_REAL_KEY..."
+ 
+echo "$OPENAI_API_KEY" | cut -c1-12 
 
-
-
+Start server
+cd /Users/davidlang/documents-local/design/kitchenPilot/kitchenpilot
+npm start
 
 # KitchenPilot context
 
