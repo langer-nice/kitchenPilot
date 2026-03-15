@@ -697,14 +697,9 @@ function getTimelineWindow(steps, currentIndex) {
   return windowSteps;
 }
 
-function createFocusedStepTimeline(title, steps, currentIndex) {
+function createFocusedStepTimeline(steps, currentIndex) {
   const card = createCard();
   card.classList.add("timeline-card");
-
-  const heading = document.createElement("p");
-  heading.className = "meta";
-  heading.textContent = title || "Steps";
-  card.appendChild(heading);
 
   const list = document.createElement("ol");
   list.className = "step-timeline";
@@ -1210,40 +1205,29 @@ function renderCooking() {
 
   if (shouldShowTimerPanel) {
 
-    const timerCard = createCard();
-    timerCard.classList.add("compact-card");
-
-    const timerLabel = document.createElement("p");
-    timerLabel.className = "meta";
-    timerLabel.textContent = "Timer";
-
-    const timerDisplay = document.createElement("div");
-    timerDisplay.className = "timer timer-display";
-    if (appState.timerStatus === "running") {
-      timerDisplay.classList.add("timer-running");
+    const timerCard = document.createElement("section");
+    timerCard.className = "timer-panel";
+    if (appState.timerStatus === "paused") {
+      timerCard.classList.add("timer-paused");
+    } else {
+      timerCard.classList.add("timer-running");
     }
+
+    const timerIcon = document.createElement("i");
+    timerIcon.className = "fa-solid fa-stopwatch timer-icon";
+    timerIcon.setAttribute("aria-hidden", "true");
+
+    const timerDisplay = document.createElement("span");
+    timerDisplay.className = "timer-display";
     timerDisplay.id = "timerDisplay";
     timerDisplay.textContent = formatTime(appState.activeTimerSeconds ?? step.timerSeconds);
 
-    const timerNoticeText = appState.timerMessage
-      || (appState.timerStatus === "paused" ? "Timer paused" : "")
-      || (appState.timerStatus === "running" ? "Timer running" : "")
-      || (appState.timerStatus === "completed" ? "Timer finished" : "");
-
-    if (timerNoticeText) {
-      const timerNotice = document.createElement("p");
-      timerNotice.id = "timerNotice";
-      timerNotice.className = "notice";
-      timerNotice.textContent = timerNoticeText;
-      timerCard.append(timerLabel, timerDisplay, timerNotice);
-    } else {
-      timerCard.append(timerLabel, timerDisplay);
-    }
+    timerCard.append(timerIcon, timerDisplay);
 
     screen.appendChild(timerCard);
   }
 
-  const card = createFocusedStepTimeline("Focused step timeline", appState.recipe.cookingSteps, idx);
+  const card = createFocusedStepTimeline(appState.recipe.cookingSteps, idx);
   screen.appendChild(card);
 
   if (!hasTimer) {
@@ -1259,13 +1243,6 @@ function renderCooking() {
   if (appState.lastSpokenCookingIndex !== idx) {
     speak(step.text);
     appState.lastSpokenCookingIndex = idx;
-  }
-
-  if (!hasTimer && appState.timerMessage) {
-    const info = document.createElement("p");
-    info.className = "notice";
-    info.textContent = appState.timerMessage;
-    screen.appendChild(info);
   }
 
   const actionBar = document.createElement("div");
@@ -1347,37 +1324,27 @@ function renderTimerActive() {
   topRow.append(previousBtn, meta, stopBtn);
   screen.appendChild(topRow);
 
-  const timerCard = createCard();
-  timerCard.classList.add("compact-card");
-  const timerLabel = document.createElement("p");
-  timerLabel.className = "meta";
-  timerLabel.textContent = "Timer";
-
-  const timerDisplay = document.createElement("div");
-  timerDisplay.className = "timer timer-display";
-  if (appState.timerStatus === "running") {
-    timerDisplay.classList.add("timer-running");
+  const timerCard = document.createElement("section");
+  timerCard.className = "timer-panel";
+  if (appState.timerStatus === "paused") {
+    timerCard.classList.add("timer-paused");
+  } else {
+    timerCard.classList.add("timer-running");
   }
+
+  const timerIcon = document.createElement("i");
+  timerIcon.className = "fa-solid fa-stopwatch timer-icon";
+  timerIcon.setAttribute("aria-hidden", "true");
+
+  const timerDisplay = document.createElement("span");
+  timerDisplay.className = "timer-display";
   timerDisplay.id = "timerDisplay";
   timerDisplay.textContent = formatTime(appState.activeTimerSeconds ?? step.timerSeconds);
 
-  const timerNotice = document.createElement("p");
-  timerNotice.id = "timerNotice";
-  timerNotice.className = "notice";
-  const timerNoticeText = appState.timerMessage
-    || (appState.timerStatus === "paused" ? "Timer paused" : "")
-    || (appState.timerStatus === "running" ? "Timer running" : "")
-    || (appState.timerStatus === "completed" ? "Timer finished" : "");
-
-  if (timerNoticeText) {
-    timerNotice.textContent = timerNoticeText;
-    timerCard.append(timerLabel, timerDisplay, timerNotice);
-  } else {
-    timerCard.append(timerLabel, timerDisplay);
-  }
+  timerCard.append(timerIcon, timerDisplay);
   screen.appendChild(timerCard);
 
-  const card = createFocusedStepTimeline("Focused step timeline", appState.recipe.cookingSteps, idx);
+  const card = createFocusedStepTimeline(appState.recipe.cookingSteps, idx);
   screen.appendChild(card);
 
   const voiceRow = document.createElement("div");

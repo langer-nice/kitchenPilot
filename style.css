@@ -287,18 +287,62 @@ button.danger,
   }
 }
 
-.timer,
-.timer-display {
-  text-align: center;
-  font-size: 1.65rem;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  color: var(--color-secondary);
+.timer-panel {
+  margin: 4px 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  align-self: center;
   font-family: "Poppins", sans-serif;
 }
 
-.timer-running {
-  color: var(--color-secondary-hover);
+.timer-panel .timer-icon {
+  font-size: 1.05rem;
+  position: relative;
+}
+
+.timer-panel .timer-display {
+  font-size: 1.7rem;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.timer-panel.timer-running {
+  background: #101010;
+}
+
+.timer-panel.timer-running .timer-icon,
+.timer-panel.timer-running .timer-display {
+  color: #ffffff;
+}
+
+.timer-panel.timer-paused {
+  background: #e3e5e8;
+}
+
+.timer-panel.timer-paused .timer-icon,
+.timer-panel.timer-paused .timer-display {
+  color: #6a717d;
+}
+
+.timer-panel.timer-paused .timer-icon {
+  opacity: 0.72;
+}
+
+.timer-panel.timer-paused .timer-icon::after {
+  content: "";
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  top: 52%;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  transform: rotate(-18deg);
 }
 
 .notice {
