@@ -1,5 +1,11 @@
 https://github.com/langer-nice/kitchenPilot
 
+Vercel : 
+https://vercel.com/david-lang/kitchen-pilot
+
+Open AI - API Keys : 
+https://platform.openai.com/api-keys
+
 
 Ingredients
 300g spaghetti

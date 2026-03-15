@@ -5,6 +5,7 @@ const appState = {
   cookingIndex: 0,
   timerMessage: "",
   timerStatus: "idle",
+  timerMessageTimeoutId: null,
   activeTimerSeconds: null,
   timerPaused: false,
   voiceListening: false,
@@ -25,6 +26,30 @@ function setTimerStatus(nextStatus, reason) {
   }
 }
 
+function clearTimerMessageLater() {
+  if (appState.timerMessageTimeoutId) {
+    window.clearTimeout(appState.timerMessageTimeoutId);
+    appState.timerMessageTimeoutId = null;
+  }
+}
+
+function flashActionButton(actionName) {
+  if (!actionName) {
+    return;
+  }
+
+  const target = document.querySelector(`[data-action="${actionName}"]`);
+  if (!target) {
+    return;
+  }
+
+  target.classList.remove("voice-active");
+  target.classList.add("voice-active");
+  window.setTimeout(() => {
+    target.classList.remove("voice-active");
+  }, 420);
+}
+
 function isGuidanceScreen(screenName) {
   return screenName === "cooking" || screenName === "timerActive";
 }
@@ -41,6 +66,7 @@ function setScreen(screenName) {
 
   if (!isGuidanceScreen(screenName)) {
     appState.timerMessage = "";
+    clearTimerMessageLater();
     setTimerStatus("idle", `leaving guidance to ${screenName}`);
     appState.activeTimerSeconds = null;
     appState.timerPaused = false;
@@ -86,7 +112,8 @@ function setScreen(screenName) {
         "Follow each step with voice help and compact controls.",
         "preparationIntro",
         "cooking",
-        "Start Cooking"
+        "Start Cooking",
+        "Voice controls are available once cooking starts."
       );
       break;
     case "cooking":
@@ -136,6 +163,38 @@ function getCurrentCookingStep() {
     return null;
   }
   return appState.recipe.cookingSteps[appState.cookingIndex] || null;
+}
+
+function getCurrentPreparationText() {
+  if (!appState.recipe || !Array.isArray(appState.recipe.preparationSteps)) {
+    return "";
+  }
+  return appState.recipe.preparationSteps[appState.preparationIndex] || "";
+}
+
+function advancePreparationStep() {
+  if (!appState.recipe) {
+    return;
+  }
+  const total = appState.recipe.preparationSteps.length;
+  if (appState.preparationIndex < total - 1) {
+    appState.preparationIndex += 1;
+    renderPreparation();
+  } else {
+    setScreen("cookingIntro");
+  }
+}
+
+function goBackPreparationStep() {
+  if (!appState.recipe) {
+    return;
+  }
+  if (appState.preparationIndex > 0) {
+    appState.preparationIndex -= 1;
+    renderPreparation();
+  } else {
+    setScreen("preparationIntro");
+  }
 }
 
 function goToNextCookingStep() {
@@ -196,6 +255,20 @@ function skipActiveTimer() {
   if (display) {
     display.textContent = "00:00";
   }
+
+  clearTimerMessageLater();
+  appState.timerMessageTimeoutId = window.setTimeout(() => {
+    if (appState.timerStatus === "skipped" && appState.cookingIndex === appState.timerSkippedStepIndex) {
+      appState.timerMessage = "";
+      if (appState.currentScreen === "cooking") {
+        renderCooking();
+      }
+      if (appState.currentScreen === "timerActive") {
+        renderTimerActive();
+      }
+    }
+    appState.timerMessageTimeoutId = null;
+  }, 1200);
 }
 
 function repeatCurrentCookingStep() {
@@ -247,6 +320,12 @@ function handleVoiceCommand(commandText) {
   const command = commandText.toLowerCase();
 
   if (command.includes("next")) {
+    if (appState.currentScreen === "preparation") {
+      flashActionButton("next");
+      advancePreparationStep();
+      return;
+    }
+
     if (appState.currentScreen === "timerActive" && !canProceedFromTimerStep()) {
       setVoiceHint("Timer is still running. Say skip timer or wait.", 2200);
       if (appState.currentScreen === "timerActive") {
@@ -255,21 +334,40 @@ function handleVoiceCommand(commandText) {
       return;
     }
 
+    flashActionButton("next");
     goToNextCookingStep();
     return;
   }
 
   if (command.includes("previous") || command.includes("back")) {
+    if (appState.currentScreen === "preparation") {
+      flashActionButton("back");
+      goBackPreparationStep();
+      return;
+    }
+
+    flashActionButton("back");
     goToPreviousCookingStep();
     return;
   }
 
   if (command.includes("repeat")) {
+    if (appState.currentScreen === "preparation") {
+      flashActionButton("repeat");
+      const prepText = getCurrentPreparationText();
+      if (prepText) {
+        speak(prepText);
+      }
+      return;
+    }
+
+    flashActionButton("repeat");
     repeatCurrentCookingStep();
     return;
   }
 
   if (command.includes("pause")) {
+    flashActionButton("pause");
     toggleGuidancePause();
     return;
   }
@@ -299,12 +397,20 @@ function handleVoiceCommand(commandText) {
   }
 
   if (command.includes("stop")) {
+    flashActionButton("stop");
     stopCookingFlow();
     return;
   }
 
   if (command.includes("skip") && command.includes("timer")) {
+    flashActionButton("skip-timer");
     skipActiveTimer();
+    if (appState.currentScreen === "timerActive") {
+      renderTimerActive();
+    }
+    if (appState.currentScreen === "cooking") {
+      renderCooking();
+    }
   }
 }
 
@@ -386,19 +492,22 @@ function setVoiceHint(message, timeoutMs = 2500) {
   }, timeoutMs);
 }
 
-function createButton(label, className, onClick) {
+function createButton(label, className, onClick, actionName) {
   const btn = document.createElement("button");
   btn.textContent = label;
   if (className) {
     btn.className = className;
   }
+  if (actionName) {
+    btn.dataset.action = actionName;
+  }
   btn.addEventListener("click", onClick);
   return btn;
 }
 
-function createInlineButton(label, className, onClick) {
+function createInlineButton(label, className, onClick, actionName) {
   const classes = ["inline-btn", className || ""].join(" ").trim();
-  return createButton(label, classes, onClick);
+  return createButton(label, classes, onClick, actionName);
 }
 
 function createCard() {
@@ -448,25 +557,35 @@ function renderHome() {
   textInput.id = "recipeText";
   textInput.placeholder = "Paste your recipe text here";
 
-  card.append(urlLabel, urlInput, textLabel, textInput);
+  const validation = document.createElement("p");
+  validation.className = "form-error";
+  validation.hidden = true;
+
+  card.append(urlLabel, urlInput, textLabel, textInput, validation);
   screen.appendChild(card);
 
   const actions = document.createElement("div");
   actions.className = "button-row";
 
   const startBtn = createButton("Start Cooking", "primary", async () => {
+    const recipeUrl = urlInput.value.trim();
     const recipeText = textInput.value.trim();
+    const parseInput = recipeText || recipeUrl;
 
-    if (!recipeText) {
-      alert("Please paste recipe text before starting analysis.");
+    if (!parseInput) {
+      validation.textContent = "Please paste a recipe URL or recipe text before continuing.";
+      validation.hidden = false;
       return;
     }
+
+    validation.hidden = true;
+    validation.textContent = "";
 
     startBtn.disabled = true;
     startBtn.textContent = "Analysing...";
 
     try {
-      const parsedRecipe = await parseRecipeText(recipeText);
+      const parsedRecipe = await parseRecipeText(parseInput);
       const recipe = normalizeRecipeForGuidance(parsedRecipe);
 
       appState.recipe = recipe;
@@ -493,6 +612,19 @@ function renderHome() {
 
   actions.append(startBtn, exampleBtn);
   screen.appendChild(actions);
+
+  const clearValidation = () => {
+    if (validation.hidden) {
+      return;
+    }
+    if (urlInput.value.trim() || textInput.value.trim()) {
+      validation.hidden = true;
+      validation.textContent = "";
+    }
+  };
+
+  urlInput.addEventListener("input", clearValidation);
+  textInput.addEventListener("input", clearValidation);
 }
 
 function renderAnalysis() {
@@ -533,8 +665,15 @@ function renderAnalysis() {
   screen.appendChild(actions);
 }
 
-function renderStageIntro(title, description, backScreen, continueScreen, continueLabel) {
+function renderStageIntro(title, description, backScreen, continueScreen, continueLabel, helperNote) {
   const screen = clearAndSetScreenTitle(title, description);
+
+  if (helperNote) {
+    const note = document.createElement("p");
+    note.className = "small";
+    note.textContent = helperNote;
+    screen.appendChild(note);
+  }
 
   const actions = document.createElement("div");
   actions.className = "button-row two";
@@ -614,8 +753,8 @@ function renderPreparation() {
       } else {
         setScreen("preparationIntro");
       }
-    }),
-    createButton("Repeat", "", () => speak(currentText)),
+    }, "back"),
+    createButton("Repeat", "", () => speak(currentText), "repeat"),
     createButton("Next", "primary", () => {
       if (appState.preparationIndex < total - 1) {
         appState.preparationIndex += 1;
@@ -623,7 +762,7 @@ function renderPreparation() {
       } else {
         setScreen("cookingIntro");
       }
-    })
+    }, "next")
   );
 
   screen.appendChild(actions);
@@ -712,7 +851,7 @@ function renderCooking() {
   const topRow = document.createElement("div");
   topRow.className = "header-row row-1";
 
-  const previousBtn = createInlineButton("<", "secondary", () => goToPreviousCookingStep());
+  const previousBtn = createInlineButton("<", "secondary", () => goToPreviousCookingStep(), "back");
   previousBtn.disabled = idx === 0;
   previousBtn.setAttribute("aria-label", "Previous step");
 
@@ -720,7 +859,7 @@ function renderCooking() {
   meta.className = "meta step-indicator";
   meta.textContent = `Step ${idx + 1} of ${total}`;
 
-  const stopBtn = createInlineButton("Stop", "danger-link", () => stopCookingFlow(true));
+  const stopBtn = createInlineButton("Stop", "danger-link", () => stopCookingFlow(true), "stop");
 
   topRow.append(previousBtn, meta, stopBtn);
   screen.appendChild(topRow);
@@ -786,6 +925,26 @@ function renderCooking() {
     appState.timerPaused = false;
   } else {
     ensureCurrentStepTimerStarted();
+
+    const timerCard = createCard();
+    timerCard.classList.add("compact-card");
+
+    const timerLabel = document.createElement("p");
+    timerLabel.className = "meta";
+    timerLabel.textContent = "Timer";
+
+    const timerDisplay = document.createElement("div");
+    timerDisplay.className = "timer";
+    timerDisplay.id = "timerDisplay";
+    timerDisplay.textContent = formatTime(appState.activeTimerSeconds ?? step.timerSeconds);
+
+    const timerNotice = document.createElement("p");
+    timerNotice.id = "timerNotice";
+    timerNotice.className = "notice";
+    timerNotice.textContent = appState.timerMessage || "Timer running";
+
+    timerCard.append(timerLabel, timerDisplay, timerNotice);
+    screen.appendChild(timerCard);
   }
 
   if (appState.lastSpokenCookingIndex !== idx) {
@@ -809,11 +968,11 @@ function renderCooking() {
   if (hasTimer) {
     const timerAllowsNext = appState.timerStatus === "completed" || appState.timerStatus === "skipped";
     actionRow.append(
-      createButton("Pause", "compact-btn", () => {
+      createButton(appState.timerPaused ? "Resume Timer" : "Pause Timer", "compact-btn", () => {
         toggleGuidancePause();
         renderCooking();
-      }),
-      createButton("Repeat", "compact-btn", () => repeatCurrentCookingStep()),
+      }, "pause"),
+      createButton("Repeat", "compact-btn", () => repeatCurrentCookingStep(), "repeat"),
       createButton(
         timerAllowsNext ? "Next" : "Skip Timer",
         "primary next-btn",
@@ -824,7 +983,8 @@ function renderCooking() {
             skipActiveTimer();
             renderCooking();
           }
-        }
+        },
+        timerAllowsNext ? "next" : "skip-timer"
       )
     );
   } else {
@@ -832,9 +992,9 @@ function renderCooking() {
       createButton("Pause", "compact-btn", () => {
         toggleGuidancePause();
         renderCooking();
-      }),
-      createButton("Repeat", "compact-btn", () => repeatCurrentCookingStep()),
-      createButton("Next", "primary next-btn", () => goToNextCookingStep())
+      }, "pause"),
+      createButton("Repeat", "compact-btn", () => repeatCurrentCookingStep(), "repeat"),
+      createButton("Next", "primary next-btn", () => goToNextCookingStep(), "next")
     );
   }
 
@@ -869,14 +1029,14 @@ function renderTimerActive() {
   const topRow = document.createElement("div");
   topRow.className = "header-row row-1";
 
-  const previousBtn = createInlineButton("<", "secondary", () => setScreen("cooking"));
+  const previousBtn = createInlineButton("<", "secondary", () => setScreen("cooking"), "back");
   previousBtn.setAttribute("aria-label", "Back to cooking step");
 
   const meta = document.createElement("p");
   meta.className = "meta step-indicator";
   meta.textContent = `Step ${idx + 1} of ${total}`;
 
-  const stopBtn = createInlineButton("Stop", "danger-link", () => stopCookingFlow(true));
+  const stopBtn = createInlineButton("Stop", "danger-link", () => stopCookingFlow(true), "stop");
 
   topRow.append(previousBtn, meta, stopBtn);
   screen.appendChild(topRow);
@@ -959,21 +1119,31 @@ function renderTimerActive() {
   const actionRow = document.createElement("div");
   actionRow.className = "action-row";
 
-  const nextBtn = createButton("Next", readyForNext ? "primary next-btn" : "compact-btn", () => goToNextCookingStep());
+  const nextBtn = createButton(
+    "Next",
+    readyForNext ? "primary next-btn" : "compact-btn",
+    () => goToNextCookingStep(),
+    "next"
+  );
   nextBtn.disabled = !readyForNext;
 
-  const skipBtn = createButton("Skip Timer", readyForNext ? "compact-btn" : "primary compact-btn", () => {
-    skipActiveTimer();
-    renderTimerActive();
-  });
+  const skipBtn = createButton(
+    "Skip Timer",
+    readyForNext ? "compact-btn" : "primary compact-btn",
+    () => {
+      skipActiveTimer();
+      renderTimerActive();
+    },
+    "skip-timer"
+  );
   skipBtn.disabled = readyForNext;
 
   actionRow.append(
-    createButton(appState.timerPaused ? "Resume" : "Pause", "compact-btn", () => {
+    createButton(appState.timerPaused ? "Resume Timer" : "Pause Timer", "compact-btn", () => {
       toggleGuidancePause();
       renderTimerActive();
-    }),
-    createButton("Repeat", "compact-btn", () => repeatCurrentCookingStep()),
+    }, "pause"),
+    createButton("Repeat", "compact-btn", () => repeatCurrentCookingStep(), "repeat"),
     skipBtn,
     nextBtn
   );

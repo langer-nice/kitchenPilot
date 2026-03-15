@@ -25,18 +25,27 @@ const EXAMPLE_RECIPE = {
       timerSeconds: 30
     },
     {
-      text: "Add chopped tomatoes, water, spaghetti, salt, and pepper."
+      text: "Add chopped tomatoes to the pan and stir."
     },
     {
-      text: "Bring to a boil, then reduce to a gentle simmer.",
+      text: "Pour in the water."
+    },
+    {
+      text: "Add spaghetti, salt, and black pepper."
+    },
+    {
+      text: "Bring the pan to a boil.",
       timerSeconds: 60
     },
     {
-      text: "Cook and stir occasionally until pasta is tender and sauce thickens.",
+      text: "Lower heat to a gentle simmer.",
       timerSeconds: 600
     },
     {
-      text: "Turn off heat, add basil and parmesan if desired, then serve."
+      text: "Stir in fresh basil if using."
+    },
+    {
+      text: "Serve and top with parmesan if desired."
     }
   ]
 };

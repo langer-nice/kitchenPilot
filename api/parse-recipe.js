@@ -1,9 +1,36 @@
 const OPENAI_API_URL = "https://api.openai.com/v1/responses";
 
 function setCorsHeaders(res) {
+  if (!res || typeof res.setHeader !== "function") {
+    return;
+  }
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+}
+
+function sendJson(res, statusCode, payload) {
+  if (res && typeof res.status === "function" && typeof res.json === "function") {
+    res.status(statusCode).json(payload);
+    return;
+  }
+
+  if (res && typeof res.writeHead === "function" && typeof res.end === "function") {
+    res.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify(payload));
+  }
+}
+
+function getMissingKeyMessage(req) {
+  const host = String(req?.headers?.host || "").toLowerCase();
+  const origin = String(req?.headers?.origin || "").toLowerCase();
+  const isVercelRequest = host.includes("vercel.app") || origin.includes("vercel.app") || Boolean(req?.headers?.["x-vercel-id"]);
+
+  if (isVercelRequest) {
+    return "Missing OPENAI_API_KEY. Add it in your Vercel Project Settings > Environment Variables and redeploy.";
+  }
+
+  return "Missing OPENAI_API_KEY. Set it in your terminal before running npm start.";
 }
 
 async function parseRequestBody(req) {
@@ -138,7 +165,9 @@ Convert the recipe text into structured JSON.
 Rules:
 - Return ONLY JSON
 - Split preparation steps and cooking steps
-- Each step must contain a single action
+- Each step must contain a single clear action
+- Split vague combined steps into multiple execution-friendly steps
+- For pasta/boiling style tasks, separate actions like: bring water to boil, add pasta, cook for X minutes
 - Detect cooking timers and convert them into timerSeconds
 - If no timer exists, omit timerSeconds
 
@@ -221,7 +250,12 @@ async function handler(req, res) {
   setCorsHeaders(res);
 
   if (req.method === "OPTIONS") {
-    res.status(204).end();
+    if (res && typeof res.status === "function" && typeof res.end === "function") {
+      res.status(204).end();
+    } else if (res && typeof res.writeHead === "function" && typeof res.end === "function") {
+      res.writeHead(204);
+      res.end();
+    }
     return;
   }
 
@@ -232,7 +266,7 @@ async function handler(req, res) {
   });
 
   if (req.method !== "POST") {
-    res.status(405).json({ error: "Method not allowed" });
+    sendJson(res, 405, { error: "Method not allowed" });
     return;
   }
 
@@ -246,37 +280,37 @@ async function handler(req, res) {
     });
 
     if (!recipeText || typeof recipeText !== "string") {
-      res.status(400).json({ error: "recipeText is required" });
+      sendJson(res, 400, { error: "recipeText is required" });
       return;
     }
 
     const parsedRecipe = await parseWithOpenAI(recipeText);
-    res.status(200).json(parsedRecipe);
+    sendJson(res, 200, parsedRecipe);
   } catch (error) {
     console.error("Recipe parser endpoint failed:", error);
     const message = error && error.message ? error.message : "Recipe parsing failed";
 
     if (error.code === "missing_api_key" || message.includes("OPENAI_API_KEY")) {
-      res.status(503).json({ error: "Missing OPENAI_API_KEY. Add it in your Vercel Project Settings > Environment Variables and redeploy." });
+      sendJson(res, 503, { error: getMissingKeyMessage(req) });
       return;
     }
 
     if (error.code === "insufficient_quota") {
-      res.status(429).json({ error: "OpenAI quota exceeded. Check billing and usage limits." });
+      sendJson(res, 429, { error: "OpenAI quota exceeded. Check billing and usage limits." });
       return;
     }
 
     if (error.code === "rate_limit_exceeded") {
-      res.status(429).json({ error: "OpenAI rate limit exceeded. Please retry in a moment." });
+      sendJson(res, 429, { error: "OpenAI rate limit exceeded. Please retry in a moment." });
       return;
     }
 
     if (error.code === "invalid_api_key") {
-      res.status(401).json({ error: "Invalid OPENAI_API_KEY. Update your key and restart the server." });
+      sendJson(res, 401, { error: "Invalid OPENAI_API_KEY. Update your key and restart the server." });
       return;
     }
 
-    res.status(error.statusCode || 500).json({ error: message });
+    sendJson(res, error.statusCode || 500, { error: message });
   }
 }
 
