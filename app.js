@@ -577,6 +577,59 @@ function createCard() {
   return card;
 }
 
+function getTimelineWindow(steps, currentIndex) {
+  const safeSteps = Array.isArray(steps) ? steps : [];
+  const start = Math.max(0, currentIndex - 2);
+  const end = Math.min(safeSteps.length - 1, currentIndex + 2);
+  const windowSteps = [];
+
+  for (let i = start; i <= end; i += 1) {
+    const step = safeSteps[i] || {};
+    const kind = i < currentIndex ? "past" : i > currentIndex ? "next" : "current";
+    windowSteps.push({
+      index: i,
+      text: String(step.text || ""),
+      kind
+    });
+  }
+
+  return windowSteps;
+}
+
+function createFocusedStepTimeline(title, steps, currentIndex) {
+  const card = createCard();
+  card.classList.add("timeline-card");
+
+  const heading = document.createElement("p");
+  heading.className = "meta";
+  heading.textContent = title || "Steps";
+  card.appendChild(heading);
+
+  const list = document.createElement("ol");
+  list.className = "step-timeline";
+
+  const windowSteps = getTimelineWindow(steps, currentIndex);
+  windowSteps.forEach((item) => {
+    const li = document.createElement("li");
+    li.className = `timeline-item ${item.kind}`;
+    li.dataset.stepKind = item.kind;
+
+    const stepLabel = document.createElement("p");
+    stepLabel.className = "timeline-step-label";
+    stepLabel.textContent = `Step ${item.index + 1}`;
+
+    const text = document.createElement("p");
+    text.className = "timeline-step-text";
+    text.textContent = item.text;
+
+    li.append(stepLabel, text);
+    list.appendChild(li);
+  });
+
+  card.appendChild(list);
+  return card;
+}
+
 function clearAndSetScreenTitle(title, subtitle) {
   appEl.innerHTML = "";
   const screen = document.createElement("div");
@@ -1027,11 +1080,7 @@ function renderCooking() {
     screen.appendChild(hint);
   }
 
-  const card = createCard();
-  const instruction = document.createElement("p");
-  instruction.className = "instruction";
-  instruction.textContent = step.text;
-  card.appendChild(instruction);
+  const card = createFocusedStepTimeline("Focused step timeline", appState.recipe.cookingSteps, idx);
   if (hasTimer) {
     const timerMeta = document.createElement("p");
     timerMeta.className = "meta";
@@ -1206,11 +1255,7 @@ function renderTimerActive() {
     screen.appendChild(hint);
   }
 
-  const card = createCard();
-  const instruction = document.createElement("p");
-  instruction.className = "instruction";
-  instruction.textContent = step.text;
-  card.appendChild(instruction);
+  const card = createFocusedStepTimeline("Focused step timeline", appState.recipe.cookingSteps, idx);
   screen.appendChild(card);
 
   const timerCard = createCard();

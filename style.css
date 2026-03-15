@@ -135,6 +135,83 @@ button.danger {
   font-weight: 700;
 }
 
+.timeline-card {
+  overflow: hidden;
+}
+
+.step-timeline {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.timeline-item {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fbfbfb;
+  animation: timeline-in 0.22s ease;
+  transition: transform 0.2s ease, opacity 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+.timeline-step-label {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 700;
+}
+
+.timeline-step-text {
+  margin: 0;
+  line-height: 1.38;
+}
+
+.timeline-item.past {
+  opacity: 0.5;
+  transform: scale(0.98);
+}
+
+.timeline-item.past .timeline-step-text {
+  font-size: 0.92rem;
+}
+
+.timeline-item.next {
+  opacity: 0.78;
+}
+
+.timeline-item.next .timeline-step-text {
+  font-size: 1rem;
+}
+
+.timeline-item.current {
+  opacity: 1;
+  background: #eef6ff;
+  border-color: #9ec2ff;
+  box-shadow: 0 8px 20px rgba(10, 91, 216, 0.12);
+}
+
+.timeline-item.current .timeline-step-text {
+  font-size: 1.32rem;
+  line-height: 1.42;
+  font-weight: 800;
+}
+
+@keyframes timeline-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .timer {
   text-align: center;
   font-size: 2rem;
