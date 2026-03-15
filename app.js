@@ -9,6 +9,8 @@ const appState = {
   activeTimerSeconds: null,
   timerPaused: false,
   voiceListening: false,
+  voiceCommandStatus: "",
+  voiceCommandStatusTimeoutId: null,
   lastSpokenCookingIndex: null,
   voiceHintMessage: "",
   voiceHintTimeoutId: null,
@@ -33,6 +35,47 @@ function clearTimerMessageLater() {
   }
 }
 
+function setVoiceCommandStatus(message, timeoutMs = 1200) {
+  appState.voiceCommandStatus = message || "";
+
+  if (appState.voiceCommandStatusTimeoutId) {
+    window.clearTimeout(appState.voiceCommandStatusTimeoutId);
+    appState.voiceCommandStatusTimeoutId = null;
+  }
+
+  if (!timeoutMs) {
+    return;
+  }
+
+  appState.voiceCommandStatusTimeoutId = window.setTimeout(() => {
+    appState.voiceCommandStatus = "";
+    appState.voiceCommandStatusTimeoutId = null;
+    if (appState.currentScreen === "preparation") {
+      renderPreparation();
+    }
+    if (appState.currentScreen === "cooking") {
+      renderCooking();
+    }
+    if (appState.currentScreen === "timerActive") {
+      renderTimerActive();
+    }
+    if (appState.currentScreen === "cookingIntro") {
+      renderCookingIntro();
+    }
+  }, timeoutMs);
+}
+
+function appendVoiceCommandStatus(screen) {
+  if (!appState.voiceCommandStatus) {
+    return;
+  }
+
+  const status = document.createElement("p");
+  status.className = "notice voice-command-status";
+  status.textContent = appState.voiceCommandStatus;
+  screen.appendChild(status);
+}
+
 function flashActionButton(actionName) {
   if (!actionName) {
     return;
@@ -47,7 +90,7 @@ function flashActionButton(actionName) {
   target.classList.add("voice-active");
   window.setTimeout(() => {
     target.classList.remove("voice-active");
-  }, 420);
+  }, 560);
 }
 
 function isGuidanceScreen(screenName) {
@@ -67,6 +110,7 @@ function setScreen(screenName) {
   if (!isGuidanceScreen(screenName)) {
     appState.timerMessage = "";
     clearTimerMessageLater();
+    setVoiceCommandStatus("", 0);
     setTimerStatus("idle", `leaving guidance to ${screenName}`);
     appState.activeTimerSeconds = null;
     appState.timerPaused = false;
@@ -107,14 +151,7 @@ function setScreen(screenName) {
       renderPreparation();
       break;
     case "cookingIntro":
-      renderStageIntro(
-        "Cooking Mode",
-        "Follow each step with voice help and compact controls.",
-        "preparationIntro",
-        "cooking",
-        "Start Cooking",
-        "Voice controls are available once cooking starts."
-      );
+      renderCookingIntro();
       break;
     case "cooking":
       renderCooking();
@@ -318,6 +355,7 @@ function stopCookingFlow(requireConfirmation = false) {
 
 function handleVoiceCommand(commandText) {
   const command = commandText.toLowerCase();
+  setVoiceCommandStatus("Processing voice command...", 800);
 
   if (command.includes("next")) {
     if (appState.currentScreen === "preparation") {
@@ -430,7 +468,30 @@ function startVoiceCommands() {
       if (!latest || !latest[0]) {
         return;
       }
-      handleVoiceCommand(latest[0].transcript || "");
+
+      const transcript = (latest[0].transcript || "").trim();
+      if (!transcript) {
+        return;
+      }
+
+      const heardLabel = transcript.length > 26 ? `${transcript.slice(0, 26)}...` : transcript;
+      setVoiceCommandStatus(`Heard: ${heardLabel}`, 1000);
+      if (appState.currentScreen === "preparation") {
+        renderPreparation();
+      }
+      if (appState.currentScreen === "cooking") {
+        renderCooking();
+      }
+      if (appState.currentScreen === "timerActive") {
+        renderTimerActive();
+      }
+      if (appState.currentScreen === "cookingIntro") {
+        renderCookingIntro();
+      }
+
+      window.setTimeout(() => {
+        handleVoiceCommand(transcript);
+      }, 90);
     };
 
     voiceRecognition.onend = () => {
@@ -685,6 +746,66 @@ function renderStageIntro(title, description, backScreen, continueScreen, contin
   screen.appendChild(actions);
 }
 
+function renderCookingIntro() {
+  const screen = clearAndSetScreenTitle(
+    "Cooking Mode",
+    "Follow each step with compact controls and optional hands-free voice guidance."
+  );
+
+  appendVoiceCommandStatus(screen);
+
+  const voiceCard = createCard();
+  voiceCard.classList.add("compact-card");
+
+  const voiceTitle = document.createElement("p");
+  voiceTitle.className = "meta";
+  voiceTitle.textContent = "Enable voice commands for hands-free cooking";
+
+  const row = document.createElement("div");
+  row.className = "header-row";
+
+  const voiceState = document.createElement("p");
+  voiceState.className = "small";
+  voiceState.textContent = appState.voiceListening ? "Voice commands: On" : "Voice commands: Off";
+
+  const voiceSwitchLabel = document.createElement("label");
+  voiceSwitchLabel.className = "mic-switch";
+  voiceSwitchLabel.setAttribute("aria-label", "Toggle voice commands");
+
+  const voiceToggleInput = document.createElement("input");
+  voiceToggleInput.type = "checkbox";
+  voiceToggleInput.checked = appState.voiceListening;
+  voiceToggleInput.disabled = !SpeechRecognition;
+  voiceToggleInput.addEventListener("change", () => {
+    if (voiceToggleInput.checked) {
+      startVoiceCommands();
+      setVoiceHint("Voice enabled. You can say: Next, Repeat, Pause.", 2200);
+      setVoiceCommandStatus("Command mode enabled", 900);
+    } else {
+      stopVoiceCommands();
+      setVoiceCommandStatus("Command mode disabled", 900);
+    }
+    renderCookingIntro();
+  });
+
+  const slider = document.createElement("span");
+  slider.className = "slider";
+
+  voiceSwitchLabel.append(voiceToggleInput, slider);
+  row.append(voiceState, voiceSwitchLabel);
+  voiceCard.append(voiceTitle, row);
+  screen.appendChild(voiceCard);
+
+  const actions = document.createElement("div");
+  actions.className = "button-row two";
+  actions.append(
+    createButton("Back", "", () => setScreen("preparationIntro"), "back"),
+    createButton("Start Cooking", "primary", () => setScreen("cooking"), "next")
+  );
+
+  screen.appendChild(actions);
+}
+
 function renderIngredients() {
   if (!appState.recipe) {
     setScreen("home");
@@ -732,6 +853,8 @@ function renderPreparation() {
   const currentText = appState.recipe.preparationSteps[idx];
 
   const screen = clearAndSetScreenTitle("Preparation", `Preparation ${idx + 1} of ${total}`);
+
+  appendVoiceCommandStatus(screen);
 
   const card = createCard();
   const text = document.createElement("p");
@@ -847,6 +970,8 @@ function renderCooking() {
 
   const screen = clearAndSetScreenTitle("Cooking Mode", appState.recipe.title);
   screen.classList.add("cooking-screen");
+
+  appendVoiceCommandStatus(screen);
 
   const topRow = document.createElement("div");
   topRow.className = "header-row row-1";
@@ -1025,6 +1150,8 @@ function renderTimerActive() {
 
   const screen = clearAndSetScreenTitle("Timer Active", appState.recipe.title);
   screen.classList.add("cooking-screen");
+
+  appendVoiceCommandStatus(screen);
 
   const topRow = document.createElement("div");
   topRow.className = "header-row row-1";

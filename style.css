@@ -250,8 +250,25 @@ button:disabled {
 }
 
 button.voice-active {
-  transform: translateY(1px) scale(0.99);
-  box-shadow: inset 0 0 0 2px rgba(10, 91, 216, 0.25);
+  transform: translateY(1px) scale(0.985);
+  box-shadow: 0 0 0 3px rgba(10, 91, 216, 0.35), inset 0 0 0 2px rgba(255, 255, 255, 0.35);
+  border: 2px solid var(--accent);
+  filter: saturate(1.2);
+}
+
+button.primary.voice-active {
+  background: #0849ad;
+}
+
+button:not(.primary).voice-active {
+  background: #d8e7ff;
+}
+
+.voice-command-status {
+  margin-top: -2px;
+  background: #e9f2ff;
+  border-color: #9ec2ff;
+  color: #0e3e89;
 }
 
 .action-bar {
