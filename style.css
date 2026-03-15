@@ -221,8 +221,28 @@ button.danger,
   border-radius: 12px;
   padding: 8px 10px;
   background: #fbfbfb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
   animation: timeline-in 0.22s ease;
   transition: transform 0.24s ease, opacity 0.24s ease, background 0.24s ease, border-color 0.24s ease;
+}
+
+.step-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.step-timer-icon {
+  margin-left: 12px;
+  opacity: 0.72;
+  color: var(--color-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 .timeline-step-label {
