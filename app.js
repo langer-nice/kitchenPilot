@@ -100,7 +100,7 @@ function appendVoiceCommandStatus(screen) {
 
   const status = document.createElement("div");
   status.id = "voice-status";
-  status.className = "notice voice-command-status";
+  status.className = "notice voice-command-status voice-status";
   status.textContent = statusText;
 
   if (statusText.toLowerCase().startsWith("heard:")) {
@@ -349,7 +349,7 @@ function skipActiveTimer() {
       }
     }
     appState.timerMessageTimeoutId = null;
-  }, 1200);
+  }, 700);
 }
 
 function repeatCurrentCookingStep() {
@@ -645,9 +645,20 @@ function setVoiceHint(message, timeoutMs = 2500) {
 function createButton(label, className, onClick, actionName) {
   const btn = document.createElement("button");
   btn.textContent = label;
-  if (className) {
-    btn.className = className;
+  const classes = className ? className.split(/\s+/).filter(Boolean) : [];
+  const hasPrimary = classes.includes("primary");
+  const hasDanger = classes.includes("danger");
+
+  classes.push("btn");
+  if (hasPrimary) {
+    classes.push("btn-primary");
+  } else if (hasDanger) {
+    classes.push("btn-danger");
+  } else {
+    classes.push("btn-secondary");
   }
+
+  btn.className = classes.join(" ");
   if (actionName) {
     btn.dataset.action = actionName;
   }
@@ -656,13 +667,13 @@ function createButton(label, className, onClick, actionName) {
 }
 
 function createInlineButton(label, className, onClick, actionName) {
-  const classes = ["inline-btn", className || ""].join(" ").trim();
+  const classes = ["inline-btn", "btn-inline", className || ""].join(" ").trim();
   return createButton(label, classes, onClick, actionName);
 }
 
 function createCard() {
   const card = document.createElement("section");
-  card.className = "card";
+  card.className = "card step-card";
   return card;
 }
 
@@ -678,6 +689,7 @@ function getTimelineWindow(steps, currentIndex) {
     windowSteps.push({
       index: i,
       text: String(step.text || ""),
+      hasTimer: Number.isInteger(step.timerSeconds) && step.timerSeconds > 0,
       kind
     });
   }
@@ -700,8 +712,11 @@ function createFocusedStepTimeline(title, steps, currentIndex) {
   const windowSteps = getTimelineWindow(steps, currentIndex);
   windowSteps.forEach((item) => {
     const li = document.createElement("li");
-    li.className = `timeline-item ${item.kind}`;
+    li.className = `timeline-item step-item step-${item.kind} ${item.kind}`;
     li.dataset.stepKind = item.kind;
+
+    const textWrap = document.createElement("div");
+    textWrap.className = "step-text";
 
     const stepLabel = document.createElement("p");
     stepLabel.className = "timeline-step-label";
@@ -711,7 +726,17 @@ function createFocusedStepTimeline(title, steps, currentIndex) {
     text.className = "timeline-step-text";
     text.textContent = item.text;
 
-    li.append(stepLabel, text);
+    textWrap.append(stepLabel, text);
+    li.appendChild(textWrap);
+
+    if (item.hasTimer) {
+      const timerIcon = document.createElement("div");
+      timerIcon.className = "step-timer-icon";
+      timerIcon.setAttribute("aria-hidden", "true");
+      timerIcon.innerHTML = '<i class="fa-regular fa-clock"></i>';
+      li.appendChild(timerIcon);
+    }
+
     list.appendChild(li);
   });
 
@@ -1114,7 +1139,7 @@ function renderCooking() {
   const hasTimer = Number.isInteger(step.timerSeconds) && step.timerSeconds > 0;
 
   const screen = clearAndSetScreenTitle("Cooking Mode", appState.recipe.title);
-  screen.classList.add("cooking-screen");
+  screen.classList.add("cooking-screen", "cooking-container");
 
   const topRow = document.createElement("div");
   topRow.className = "header-row row-1";
@@ -1127,25 +1152,27 @@ function renderCooking() {
   meta.className = "meta step-indicator";
   meta.textContent = `Step ${idx + 1} of ${total}`;
 
-  const stopBtn = createInlineButton("Stop", "danger-link", () => stopCookingFlow(true), "stop");
+  const stopBtn = createInlineButton("Stop", "danger", () => stopCookingFlow(true), "stop");
 
   topRow.append(previousBtn, meta, stopBtn);
   screen.appendChild(topRow);
 
-  const card = createFocusedStepTimeline("Focused step timeline", appState.recipe.cookingSteps, idx);
-  if (hasTimer) {
-    const timerMeta = document.createElement("p");
-    timerMeta.className = "meta";
-    timerMeta.textContent = `Includes a ${formatTime(step.timerSeconds)} timer.`;
-    card.appendChild(timerMeta);
-  }
-  screen.appendChild(card);
-
   const voiceRow = document.createElement("div");
-  voiceRow.className = "header-row row-2";
+  voiceRow.className = "header-row row-2 voice-panel";
+  if (appState.voiceListening) {
+    voiceRow.classList.add("voice-active");
+  }
   const voiceLabel = document.createElement("p");
   voiceLabel.className = "meta voice-label";
-  voiceLabel.textContent = "Voice";
+
+  const voiceIcon = document.createElement("i");
+  voiceIcon.className = "fa-solid fa-microphone voice-icon";
+  voiceIcon.setAttribute("aria-hidden", "true");
+
+  const voiceText = document.createElement("span");
+  voiceText.textContent = "Voice";
+
+  voiceLabel.append(voiceIcon, voiceText);
 
   const voiceSwitchLabel = document.createElement("label");
   voiceSwitchLabel.className = "mic-switch";
@@ -1175,17 +1202,13 @@ function renderCooking() {
   voiceRow.append(voiceLabel, voiceSwitchLabel);
   screen.appendChild(voiceRow);
 
-  appendVoiceCommandStatus(screen);
-
-  if (appState.voiceHintMessage) {
-    const hint = document.createElement("p");
-    hint.className = "small voice-hint";
-    hint.textContent = appState.voiceHintMessage;
-    screen.appendChild(hint);
-  }
-
   if (hasTimer) {
     ensureCurrentStepTimerStarted();
+  }
+
+  const shouldShowTimerPanel = hasTimer;
+
+  if (shouldShowTimerPanel) {
 
     const timerCard = createCard();
     timerCard.classList.add("compact-card");
@@ -1195,29 +1218,33 @@ function renderCooking() {
     timerLabel.textContent = "Timer";
 
     const timerDisplay = document.createElement("div");
-    timerDisplay.className = "timer";
+    timerDisplay.className = "timer timer-display";
+    if (appState.timerStatus === "running") {
+      timerDisplay.classList.add("timer-running");
+    }
     timerDisplay.id = "timerDisplay";
     timerDisplay.textContent = formatTime(appState.activeTimerSeconds ?? step.timerSeconds);
 
-    const timerNotice = document.createElement("p");
-    timerNotice.id = "timerNotice";
-    timerNotice.className = "notice";
-    timerNotice.textContent = appState.timerMessage || "Timer running";
+    const timerNoticeText = appState.timerMessage
+      || (appState.timerStatus === "paused" ? "Timer paused" : "")
+      || (appState.timerStatus === "running" ? "Timer running" : "")
+      || (appState.timerStatus === "completed" ? "Timer finished" : "");
 
-    timerCard.append(timerLabel, timerDisplay, timerNotice);
+    if (timerNoticeText) {
+      const timerNotice = document.createElement("p");
+      timerNotice.id = "timerNotice";
+      timerNotice.className = "notice";
+      timerNotice.textContent = timerNoticeText;
+      timerCard.append(timerLabel, timerDisplay, timerNotice);
+    } else {
+      timerCard.append(timerLabel, timerDisplay);
+    }
+
     screen.appendChild(timerCard);
   }
 
-  const instructionCard = createCard();
-  instructionCard.classList.add("step-detail-card");
-  const instructionLabel = document.createElement("p");
-  instructionLabel.className = "meta";
-  instructionLabel.textContent = "Step instructions";
-  const instructionText = document.createElement("p");
-  instructionText.className = "instruction step-detail-text";
-  instructionText.textContent = step.text;
-  instructionCard.append(instructionLabel, instructionText);
-  screen.appendChild(instructionCard);
+  const card = createFocusedStepTimeline("Focused step timeline", appState.recipe.cookingSteps, idx);
+  screen.appendChild(card);
 
   if (!hasTimer) {
     stopTimer();
@@ -1250,14 +1277,14 @@ function renderCooking() {
     actionRow.classList.add("timer-action-row");
     const timerAllowsNext = appState.timerStatus === "completed" || appState.timerStatus === "skipped";
     actionRow.append(
-      createButton(appState.timerPaused ? "Resume Timer" : "Pause Timer", "compact-btn", () => {
+      createButton(appState.timerPaused ? "Resume Timer" : "Pause Timer", "btn-compact", () => {
         toggleGuidancePause();
         renderCooking();
       }, "pause"),
-      createButton("Repeat", "compact-btn", () => repeatCurrentCookingStep(), "repeat"),
+      createButton("Repeat", "btn-compact", () => repeatCurrentCookingStep(), "repeat"),
       createButton(
         timerAllowsNext ? "Next" : "Skip Timer",
-        "primary next-btn",
+        "primary btn-next",
         () => {
           if (timerAllowsNext) {
             goToNextCookingStep();
@@ -1272,8 +1299,8 @@ function renderCooking() {
   } else {
     actionRow.classList.add("no-timer-action-row");
     actionRow.append(
-      createButton("Repeat", "compact-btn", () => repeatCurrentCookingStep(), "repeat"),
-      createButton("Next", "primary next-btn", () => goToNextCookingStep(), "next")
+      createButton("Repeat", "btn-compact", () => repeatCurrentCookingStep(), "repeat"),
+      createButton("Next", "primary btn-next", () => goToNextCookingStep(), "next")
     );
   }
 
@@ -1303,7 +1330,7 @@ function renderTimerActive() {
   }
 
   const screen = clearAndSetScreenTitle("Timer Active", appState.recipe.title);
-  screen.classList.add("cooking-screen");
+  screen.classList.add("cooking-screen", "cooking-container");
 
   const topRow = document.createElement("div");
   topRow.className = "header-row row-1";
@@ -1315,7 +1342,7 @@ function renderTimerActive() {
   meta.className = "meta step-indicator";
   meta.textContent = `Step ${idx + 1} of ${total}`;
 
-  const stopBtn = createInlineButton("Stop", "danger-link", () => stopCookingFlow(true), "stop");
+  const stopBtn = createInlineButton("Stop", "danger", () => stopCookingFlow(true), "stop");
 
   topRow.append(previousBtn, meta, stopBtn);
   screen.appendChild(topRow);
@@ -1327,26 +1354,48 @@ function renderTimerActive() {
   timerLabel.textContent = "Timer";
 
   const timerDisplay = document.createElement("div");
-  timerDisplay.className = "timer";
+  timerDisplay.className = "timer timer-display";
+  if (appState.timerStatus === "running") {
+    timerDisplay.classList.add("timer-running");
+  }
   timerDisplay.id = "timerDisplay";
   timerDisplay.textContent = formatTime(appState.activeTimerSeconds ?? step.timerSeconds);
 
   const timerNotice = document.createElement("p");
   timerNotice.id = "timerNotice";
   timerNotice.className = "notice";
-  timerNotice.textContent = appState.timerMessage || "Timer ready";
+  const timerNoticeText = appState.timerMessage
+    || (appState.timerStatus === "paused" ? "Timer paused" : "")
+    || (appState.timerStatus === "running" ? "Timer running" : "")
+    || (appState.timerStatus === "completed" ? "Timer finished" : "");
 
-  timerCard.append(timerLabel, timerDisplay, timerNotice);
+  if (timerNoticeText) {
+    timerNotice.textContent = timerNoticeText;
+    timerCard.append(timerLabel, timerDisplay, timerNotice);
+  } else {
+    timerCard.append(timerLabel, timerDisplay);
+  }
   screen.appendChild(timerCard);
 
   const card = createFocusedStepTimeline("Focused step timeline", appState.recipe.cookingSteps, idx);
   screen.appendChild(card);
 
   const voiceRow = document.createElement("div");
-  voiceRow.className = "header-row row-2";
+  voiceRow.className = "header-row row-2 voice-panel";
+  if (appState.voiceListening) {
+    voiceRow.classList.add("voice-active");
+  }
   const voiceLabel = document.createElement("p");
   voiceLabel.className = "meta voice-label";
-  voiceLabel.textContent = "Voice";
+
+  const voiceIcon = document.createElement("i");
+  voiceIcon.className = "fa-solid fa-microphone voice-icon";
+  voiceIcon.setAttribute("aria-hidden", "true");
+
+  const voiceText = document.createElement("span");
+  voiceText.textContent = "Voice";
+
+  voiceLabel.append(voiceIcon, voiceText);
 
   const voiceSwitchLabel = document.createElement("label");
   voiceSwitchLabel.className = "mic-switch";
@@ -1376,15 +1425,6 @@ function renderTimerActive() {
   voiceRow.append(voiceLabel, voiceSwitchLabel);
   screen.appendChild(voiceRow);
 
-  appendVoiceCommandStatus(screen);
-
-  if (appState.voiceHintMessage) {
-    const hint = document.createElement("p");
-    hint.className = "small voice-hint";
-    hint.textContent = appState.voiceHintMessage;
-    screen.appendChild(hint);
-  }
-
   if (appState.lastSpokenCookingIndex !== idx) {
     speak(step.text);
     appState.lastSpokenCookingIndex = idx;
@@ -1402,7 +1442,7 @@ function renderTimerActive() {
 
   const nextBtn = createButton(
     "Next",
-    readyForNext ? "primary next-btn" : "compact-btn",
+    readyForNext ? "primary btn-next" : "btn-compact",
     () => goToNextCookingStep(),
     "next"
   );
@@ -1410,7 +1450,7 @@ function renderTimerActive() {
 
   const skipBtn = createButton(
     "Skip Timer",
-    readyForNext ? "compact-btn" : "primary compact-btn",
+    readyForNext ? "btn-compact" : "primary btn-compact",
     () => {
       skipActiveTimer();
       renderTimerActive();
@@ -1420,11 +1460,11 @@ function renderTimerActive() {
   skipBtn.disabled = readyForNext;
 
   actionRow.append(
-    createButton(appState.timerPaused ? "Resume Timer" : "Pause Timer", "compact-btn", () => {
+    createButton(appState.timerPaused ? "Resume Timer" : "Pause Timer", "btn-compact", () => {
       toggleGuidancePause();
       renderTimerActive();
     }, "pause"),
-    createButton("Repeat", "compact-btn", () => repeatCurrentCookingStep(), "repeat"),
+    createButton("Repeat", "btn-compact", () => repeatCurrentCookingStep(), "repeat"),
     skipBtn,
     nextBtn
   );

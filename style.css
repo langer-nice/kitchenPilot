@@ -24,6 +24,18 @@
   /* Border */
   --color-border: #e3e6eb;
 
+  /* SPACING */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
+  /* BORDER RADIUS */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
   --bg: var(--color-background);
   --surface: var(--color-surface);
   --text: var(--color-text-primary);
@@ -31,10 +43,10 @@
   --accent: var(--color-primary);
   --danger: var(--color-danger);
   --border: var(--color-border);
-  --radius: 14px;
-  --space-1: 8px;
+  --radius: var(--radius-lg);
+  --space-1: var(--space-sm);
   --space-2: 12px;
-  --space-3: 16px;
+  --space-3: var(--space-md);
   --space-4: 20px;
   --space-5: 28px;
 }
@@ -79,6 +91,10 @@ h2 {
   font-weight: 600;
 }
 
+h3 {
+  font-family: "Poppins", sans-serif;
+}
+
 .subtitle,
 .meta,
 .small {
@@ -92,7 +108,8 @@ h2 {
   font-weight: 600;
 }
 
-.card {
+.card,
+.step-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -125,7 +142,8 @@ textarea {
   min-height: 140px;
 }
 
-button {
+button,
+.btn {
   border: 0;
   padding: 14px;
   font-weight: 700;
@@ -135,22 +153,31 @@ button {
   transition: background 0.2s ease, transform 0.12s ease;
 }
 
-button.primary {
+button.primary,
+.btn-primary {
   background: var(--color-primary);
   color: #fff;
 }
 
-button.primary:hover {
+button.primary:hover,
+.btn-primary:hover {
   background: var(--color-primary-hover);
 }
 
-button:not(.primary):not(.danger):hover {
+button:not(.primary):not(.danger):hover,
+.btn-secondary:hover {
   background: #dfe3eb;
 }
 
-button.danger {
+button.danger,
+.btn-danger {
   background: var(--color-danger);
   color: #fff;
+}
+
+.btn-secondary {
+  background: #e9ecf2;
+  color: var(--text);
 }
 
 .button-row {
@@ -188,13 +215,23 @@ button.danger {
   gap: 7px;
 }
 
-.timeline-item {
+.timeline-item,
+.step-item {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 8px 10px;
   background: #fbfbfb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
   animation: timeline-in 0.22s ease;
   transition: transform 0.24s ease, opacity 0.24s ease, background 0.24s ease, border-color 0.24s ease;
+}
+
+.step-text {
+  min-width: 0;
+  flex: 1;
 }
 
 .timeline-step-label {
@@ -212,31 +249,48 @@ button.danger {
   line-height: 1.38;
 }
 
-.timeline-item.past {
+.step-timer-icon {
+  color: var(--color-secondary);
+  font-size: 0.95rem;
+  line-height: 1;
+  opacity: 0.78;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.timeline-item.past,
+.step-past {
   opacity: 0.5;
   transform: scale(0.98);
 }
 
-.timeline-item.past .timeline-step-text {
+.timeline-item.past .timeline-step-text,
+.step-past .timeline-step-text {
   font-size: 0.92rem;
 }
 
-.timeline-item.next {
+.timeline-item.next,
+.step-next {
   opacity: 0.78;
 }
 
-.timeline-item.next .timeline-step-text {
+.timeline-item.next .timeline-step-text,
+.step-next .timeline-step-text {
   font-size: 1rem;
 }
 
-.timeline-item.current {
+.timeline-item.current,
+.step-current {
   opacity: 1;
   background: var(--color-primary-light);
   border: 2px solid var(--color-primary);
   box-shadow: 0 8px 20px rgba(10, 91, 216, 0.12);
 }
 
-.timeline-item.current .timeline-step-text {
+.timeline-item.current .timeline-step-text,
+.step-current .timeline-step-text {
   font-size: 1.22rem;
   line-height: 1.34;
   font-weight: 800;
@@ -253,13 +307,18 @@ button.danger {
   }
 }
 
-.timer {
+.timer,
+.timer-display {
   text-align: center;
   font-size: 1.65rem;
   font-weight: 800;
   letter-spacing: 0.02em;
   color: var(--color-secondary);
   font-family: "Poppins", sans-serif;
+}
+
+.timer-running {
+  color: var(--color-secondary-hover);
 }
 
 .notice {
@@ -270,7 +329,8 @@ button.danger {
   font-weight: 600;
 }
 
-.cooking-screen {
+.cooking-screen,
+.cooking-container {
   gap: 8px;
   height: calc(100dvh - 32px);
   overflow: hidden;
@@ -298,6 +358,32 @@ button.danger {
 
 .voice-label {
   margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.voice-panel {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 6px 8px;
+  background: var(--surface);
+}
+
+.voice-icon {
+  color: var(--muted);
+  font-size: 0.95rem;
+  transition: color 0.2s ease;
+}
+
+.voice-panel.voice-active {
+  background: var(--color-primary-light);
+  border-color: #9ec2ff;
+}
+
+.voice-panel.voice-active .voice-icon {
+  color: var(--color-primary);
+  animation: mic-icon-pulse 1.5s ease-in-out infinite;
 }
 
 .voice-hint {
@@ -320,7 +406,8 @@ button.danger {
   font-weight: 700;
 }
 
-button.inline-btn {
+button.inline-btn,
+.btn-inline {
   width: auto;
   padding: 7px 10px;
   font-size: 0.9rem;
@@ -377,16 +464,21 @@ button.inline-btn {
   animation: mic-pulse 1.15s ease-in-out infinite;
 }
 
-button.inline-btn.secondary {
+button.inline-btn.secondary,
+.btn-inline.secondary {
   background: #e9ecf2;
 }
 
-button.inline-btn.danger-link {
+button.inline-btn.danger-link,
+.btn-inline.danger,
+.btn-inline.btn-danger {
   color: #fff;
   background: var(--color-danger);
 }
 
-button.inline-btn.danger-link:hover {
+button.inline-btn.danger-link:hover,
+.btn-inline.danger:hover,
+.btn-inline.btn-danger:hover {
   background: #cd4045;
 }
 
@@ -410,7 +502,8 @@ button:not(.primary).voice-active {
   background: #d8e7ff;
 }
 
-.voice-command-status {
+.voice-command-status,
+.voice-status {
   margin-top: -2px;
   background: #e9f2ff;
   border-color: #9ec2ff;
@@ -449,6 +542,18 @@ button:not(.primary).voice-active {
   }
 }
 
+@keyframes mic-icon-pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
 .action-bar {
   position: static;
   margin-top: auto;
@@ -469,11 +574,13 @@ button:not(.primary).voice-active {
   font-size: 0.9rem;
 }
 
-.action-row .compact-btn {
+.action-row .compact-btn,
+.action-row .btn-compact {
   flex: 1;
 }
 
-.action-row .next-btn {
+.action-row .next-btn,
+.action-row .btn-next {
   flex: 1.5;
 }
 
@@ -482,7 +589,8 @@ button:not(.primary).voice-active {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.timer-action-row .next-btn {
+.timer-action-row .next-btn,
+.timer-action-row .btn-next {
   grid-column: 1 / -1;
 }
 
@@ -500,7 +608,8 @@ button:not(.primary).voice-active {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
-  .timer-action-row .next-btn {
+  .timer-action-row .next-btn,
+  .timer-action-row .btn-next {
     grid-column: auto;
   }
 }
