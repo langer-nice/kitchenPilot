@@ -221,17 +221,8 @@ button.danger,
   border-radius: 12px;
   padding: 8px 10px;
   background: #fbfbfb;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--space-2);
   animation: timeline-in 0.22s ease;
   transition: transform 0.24s ease, opacity 0.24s ease, background 0.24s ease, border-color 0.24s ease;
-}
-
-.step-text {
-  min-width: 0;
-  flex: 1;
 }
 
 .timeline-step-label {
@@ -247,17 +238,6 @@ button.danger,
 .timeline-step-text {
   margin: 0;
   line-height: 1.38;
-}
-
-.step-timer-icon {
-  color: var(--color-secondary);
-  font-size: 0.95rem;
-  line-height: 1;
-  opacity: 0.78;
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .timeline-item.past,
@@ -358,32 +338,6 @@ button.danger,
 
 .voice-label {
   margin: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.voice-panel {
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 6px 8px;
-  background: var(--surface);
-}
-
-.voice-icon {
-  color: var(--muted);
-  font-size: 0.95rem;
-  transition: color 0.2s ease;
-}
-
-.voice-panel.voice-active {
-  background: var(--color-primary-light);
-  border-color: #9ec2ff;
-}
-
-.voice-panel.voice-active .voice-icon {
-  color: var(--color-primary);
-  animation: mic-icon-pulse 1.5s ease-in-out infinite;
 }
 
 .voice-hint {
@@ -406,8 +360,7 @@ button.danger,
   font-weight: 700;
 }
 
-button.inline-btn,
-.btn-inline {
+button.inline-btn {
   width: auto;
   padding: 7px 10px;
   font-size: 0.9rem;
@@ -464,21 +417,16 @@ button.inline-btn,
   animation: mic-pulse 1.15s ease-in-out infinite;
 }
 
-button.inline-btn.secondary,
-.btn-inline.secondary {
+button.inline-btn.secondary {
   background: #e9ecf2;
 }
 
-button.inline-btn.danger-link,
-.btn-inline.danger,
-.btn-inline.btn-danger {
+button.inline-btn.danger-link {
   color: #fff;
   background: var(--color-danger);
 }
 
-button.inline-btn.danger-link:hover,
-.btn-inline.danger:hover,
-.btn-inline.btn-danger:hover {
+button.inline-btn.danger-link:hover {
   background: #cd4045;
 }
 
@@ -542,18 +490,6 @@ button:not(.primary).voice-active {
   }
 }
 
-@keyframes mic-icon-pulse {
-  0% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.08);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
 .action-bar {
   position: static;
   margin-top: auto;
@@ -569,29 +505,33 @@ button:not(.primary).voice-active {
   gap: var(--space-2);
 }
 
-.action-row button {
-  padding: 8px;
-  font-size: 0.9rem;
+.cooking-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
-.action-row .compact-btn,
-.action-row .btn-compact {
-  flex: 1;
+.cooking-actions button {
+  min-height: 60px;
+  padding: 14px 20px;
+  font-size: 18px;
+  font-weight: 600;
 }
 
-.action-row .next-btn,
-.action-row .btn-next {
-  flex: 1.5;
+.cooking-actions .btn-compact {
+  width: 100%;
+}
+
+.cooking-actions .btn-next {
+  grid-column: 1 / -1;
+  width: 100%;
+  background: var(--color-primary);
+  color: #fff;
 }
 
 .timer-action-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.timer-action-row .next-btn,
-.timer-action-row .btn-next {
-  grid-column: 1 / -1;
 }
 
 .no-timer-action-row {
@@ -602,14 +542,5 @@ button:not(.primary).voice-active {
 @media (min-width: 720px) {
   .button-row.three {
     grid-template-columns: repeat(3, 1fr);
-  }
-
-  .timer-action-row {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
-  .timer-action-row .next-btn,
-  .timer-action-row .btn-next {
-    grid-column: auto;
   }
 }

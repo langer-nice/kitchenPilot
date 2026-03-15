@@ -1271,7 +1271,7 @@ function renderCooking() {
   const actionBar = document.createElement("div");
   actionBar.className = "action-bar";
   const actionRow = document.createElement("div");
-  actionRow.className = "action-row";
+  actionRow.className = "action-row cooking-actions";
 
   if (hasTimer) {
     actionRow.classList.add("timer-action-row");
@@ -1437,7 +1437,7 @@ function renderTimerActive() {
   const actionBar = document.createElement("div");
   actionBar.className = "action-bar";
   const actionRow = document.createElement("div");
-  actionRow.className = "action-row";
+  actionRow.className = "action-row cooking-actions";
   actionRow.classList.add("timer-action-row");
 
   const nextBtn = createButton(
