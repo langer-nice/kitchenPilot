@@ -1,11 +1,36 @@
 :root {
-  --bg: #f8f8f8;
-  --surface: #ffffff;
-  --text: #111111;
-  --muted: #444444;
-  --accent: #0a5bd8;
-  --danger: #b00020;
-  --border: #d7d7d7;
+  /* Primary */
+  --color-primary: #2f6bff;
+  --color-primary-hover: #1e54d6;
+  --color-primary-light: #e8f0ff;
+
+  /* Secondary */
+  --color-secondary: #2fbf71;
+  --color-secondary-hover: #25a561;
+  --color-secondary-light: #e6f7ef;
+
+  /* Danger */
+  --color-danger: #e5484d;
+
+  /* Background */
+  --color-background: #f7f8fa;
+  --color-surface: #ffffff;
+
+  /* Text */
+  --color-text-primary: #1a1a1a;
+  --color-text-secondary: #5a5f6a;
+  --color-text-muted: #9aa1ac;
+
+  /* Border */
+  --color-border: #e3e6eb;
+
+  --bg: var(--color-background);
+  --surface: var(--color-surface);
+  --text: var(--color-text-primary);
+  --muted: var(--color-text-secondary);
+  --accent: var(--color-primary);
+  --danger: var(--color-danger);
+  --border: var(--color-border);
   --radius: 14px;
   --space-1: 8px;
   --space-2: 12px;
@@ -20,7 +45,7 @@
 
 body {
   margin: 0;
-  font-family: "Segoe UI", Arial, sans-serif;
+  font-family: "Inter", sans-serif;
   background: var(--bg);
   color: var(--text);
 }
@@ -42,12 +67,16 @@ h1 {
   margin: 0;
   font-size: 2rem;
   line-height: 1.2;
+  font-family: "Poppins", sans-serif;
+  font-weight: 700;
 }
 
 h2 {
   margin: 0;
   font-size: 1.4rem;
   line-height: 1.3;
+  font-family: "Poppins", sans-serif;
+  font-weight: 600;
 }
 
 .subtitle,
@@ -80,6 +109,7 @@ button {
   width: 100%;
   border-radius: 12px;
   font-size: 1rem;
+  font-family: "Inter", sans-serif;
 }
 
 input,
@@ -100,17 +130,26 @@ button {
   padding: 14px;
   font-weight: 700;
   cursor: pointer;
-  background: #e7e7e7;
+  background: #e9ecf2;
   color: var(--text);
+  transition: background 0.2s ease, transform 0.12s ease;
 }
 
 button.primary {
-  background: var(--accent);
+  background: var(--color-primary);
   color: #fff;
 }
 
+button.primary:hover {
+  background: var(--color-primary-hover);
+}
+
+button:not(.primary):not(.danger):hover {
+  background: #dfe3eb;
+}
+
 button.danger {
-  background: var(--danger);
+  background: var(--color-danger);
   color: #fff;
 }
 
@@ -165,6 +204,7 @@ button.danger {
   text-transform: uppercase;
   letter-spacing: 0.03em;
   font-weight: 700;
+  font-family: "Poppins", sans-serif;
 }
 
 .timeline-step-text {
@@ -191,8 +231,8 @@ button.danger {
 
 .timeline-item.current {
   opacity: 1;
-  background: #eef6ff;
-  border-color: #9ec2ff;
+  background: var(--color-primary-light);
+  border: 2px solid var(--color-primary);
   box-shadow: 0 8px 20px rgba(10, 91, 216, 0.12);
 }
 
@@ -218,6 +258,8 @@ button.danger {
   font-size: 1.65rem;
   font-weight: 800;
   letter-spacing: 0.02em;
+  color: var(--color-secondary);
+  font-family: "Poppins", sans-serif;
 }
 
 .notice {
@@ -251,6 +293,7 @@ button.danger {
   text-align: center;
   flex: 1;
   font-weight: 600;
+  font-family: "Poppins", sans-serif;
 }
 
 .voice-label {
@@ -266,12 +309,23 @@ button.danger {
   padding: 8px 10px;
 }
 
+.step-detail-card {
+  padding: 8px 10px;
+}
+
+.step-detail-text {
+  margin: 4px 0 0;
+  font-size: 1.02rem;
+  line-height: 1.32;
+  font-weight: 700;
+}
+
 button.inline-btn {
   width: auto;
   padding: 7px 10px;
   font-size: 0.9rem;
   border: 1px solid var(--border);
-  background: #f2f2f2;
+  background: #e9ecf2;
 }
 
 .mic-switch {
@@ -324,12 +378,16 @@ button.inline-btn {
 }
 
 button.inline-btn.secondary {
-  background: #f2f2f2;
+  background: #e9ecf2;
 }
 
 button.inline-btn.danger-link {
-  color: var(--danger);
-  background: #fff;
+  color: #fff;
+  background: var(--color-danger);
+}
+
+button.inline-btn.danger-link:hover {
+  background: #cd4045;
 }
 
 button:disabled {

@@ -1132,30 +1132,6 @@ function renderCooking() {
   topRow.append(previousBtn, meta, stopBtn);
   screen.appendChild(topRow);
 
-  if (hasTimer) {
-    ensureCurrentStepTimerStarted();
-
-    const timerCard = createCard();
-    timerCard.classList.add("compact-card");
-
-    const timerLabel = document.createElement("p");
-    timerLabel.className = "meta";
-    timerLabel.textContent = "Timer";
-
-    const timerDisplay = document.createElement("div");
-    timerDisplay.className = "timer";
-    timerDisplay.id = "timerDisplay";
-    timerDisplay.textContent = formatTime(appState.activeTimerSeconds ?? step.timerSeconds);
-
-    const timerNotice = document.createElement("p");
-    timerNotice.id = "timerNotice";
-    timerNotice.className = "notice";
-    timerNotice.textContent = appState.timerMessage || "Timer running";
-
-    timerCard.append(timerLabel, timerDisplay, timerNotice);
-    screen.appendChild(timerCard);
-  }
-
   const card = createFocusedStepTimeline("Focused step timeline", appState.recipe.cookingSteps, idx);
   if (hasTimer) {
     const timerMeta = document.createElement("p");
@@ -1207,6 +1183,41 @@ function renderCooking() {
     hint.textContent = appState.voiceHintMessage;
     screen.appendChild(hint);
   }
+
+  if (hasTimer) {
+    ensureCurrentStepTimerStarted();
+
+    const timerCard = createCard();
+    timerCard.classList.add("compact-card");
+
+    const timerLabel = document.createElement("p");
+    timerLabel.className = "meta";
+    timerLabel.textContent = "Timer";
+
+    const timerDisplay = document.createElement("div");
+    timerDisplay.className = "timer";
+    timerDisplay.id = "timerDisplay";
+    timerDisplay.textContent = formatTime(appState.activeTimerSeconds ?? step.timerSeconds);
+
+    const timerNotice = document.createElement("p");
+    timerNotice.id = "timerNotice";
+    timerNotice.className = "notice";
+    timerNotice.textContent = appState.timerMessage || "Timer running";
+
+    timerCard.append(timerLabel, timerDisplay, timerNotice);
+    screen.appendChild(timerCard);
+  }
+
+  const instructionCard = createCard();
+  instructionCard.classList.add("step-detail-card");
+  const instructionLabel = document.createElement("p");
+  instructionLabel.className = "meta";
+  instructionLabel.textContent = "Step instructions";
+  const instructionText = document.createElement("p");
+  instructionText.className = "instruction step-detail-text";
+  instructionText.textContent = step.text;
+  instructionCard.append(instructionLabel, instructionText);
+  screen.appendChild(instructionCard);
 
   if (!hasTimer) {
     stopTimer();
