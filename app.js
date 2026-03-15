@@ -10,6 +10,7 @@ const appState = {
   timerPaused: false,
   voiceEnabled: false,
   voiceListening: false,
+  voiceErrorMessage: "",
   voiceHeard: "",
   voiceExecuting: false,
   voiceCommandStatus: "",
@@ -117,6 +118,17 @@ function appendVoiceCommandStatus(screen) {
   }
 
   screen.appendChild(status);
+}
+
+function appendVoiceError(screen) {
+  if (!appState.voiceErrorMessage) {
+    return;
+  }
+
+  const errorEl = document.createElement("p");
+  errorEl.className = "voice-error";
+  errorEl.textContent = appState.voiceErrorMessage;
+  screen.appendChild(errorEl);
 }
 
 function flashActionButton(actionName) {
@@ -530,11 +542,13 @@ function handleVoiceCommand(commandText) {
 function startVoiceCommands() {
   if (!SpeechRecognition) {
     appState.voiceEnabled = false;
+    appState.voiceErrorMessage = "Voice input is not supported in this browser.";
     renderCurrentVoiceScreen();
     return;
   }
 
   appState.voiceEnabled = true;
+  appState.voiceErrorMessage = "";
 
   if (appState.voiceListening) {
     renderCurrentVoiceScreen();
@@ -592,10 +606,18 @@ function startVoiceCommands() {
       }
     };
 
-    voiceRecognition.onerror = () => {
+    voiceRecognition.onerror = (event) => {
       appState.voiceEnabled = false;
       appState.voiceListening = false;
       appState.voiceExecuting = false;
+      const code = event && event.error ? String(event.error) : "";
+      if (code === "not-allowed" || code === "service-not-allowed") {
+        appState.voiceErrorMessage = "Microphone permission denied. Enable microphone access and try again.";
+      } else if (code === "audio-capture") {
+        appState.voiceErrorMessage = "No microphone was found. Connect a microphone and try again.";
+      } else {
+        appState.voiceErrorMessage = "Voice input is currently unavailable. Please try again.";
+      }
       setVoiceHint("Voice unavailable in this browser.", 2500);
       setVoiceCommandStatus("", 0);
       if (appState.currentScreen === "cooking") {
@@ -617,6 +639,7 @@ function startVoiceCommands() {
     voiceRecognition.start();
   } catch {
     appState.voiceEnabled = false;
+    appState.voiceErrorMessage = "Could not start voice input. Check microphone permission and try again.";
     setVoiceCommandStatus("", 0);
     if (typeof window.setVoiceMicPulse === "function") {
       window.setVoiceMicPulse(false);
@@ -628,6 +651,7 @@ function startVoiceCommands() {
 function stopVoiceCommands() {
   appState.voiceEnabled = false;
   appState.voiceListening = false;
+  appState.voiceErrorMessage = "";
   appState.voiceExecuting = false;
   appState.voiceHeard = "";
   setVoiceCommandStatus("", 0);
@@ -639,6 +663,27 @@ function stopVoiceCommands() {
       voiceRecognition.stop();
     } catch {
       // Ignore stop errors when recognition is not active.
+    }
+  }
+
+  renderCurrentVoiceScreen();
+}
+
+function setVoiceEnabled(nextEnabled, options = {}) {
+  const { hintMessage = "", hintMs = 0, statusMessage = "", statusMs = 0 } = options;
+
+  if (nextEnabled) {
+    startVoiceCommands();
+    if (appState.voiceEnabled && hintMessage) {
+      setVoiceHint(hintMessage, hintMs || 2200);
+    }
+    if (appState.voiceEnabled && statusMessage) {
+      setVoiceCommandStatus(statusMessage, statusMs || 900);
+    }
+  } else {
+    stopVoiceCommands();
+    if (statusMessage) {
+      setVoiceCommandStatus(statusMessage, statusMs || 900);
     }
   }
 
@@ -968,16 +1013,15 @@ function renderCookingIntro() {
   voiceToggleInput.type = "checkbox";
   voiceToggleInput.checked = appState.voiceEnabled;
   voiceToggleInput.disabled = !SpeechRecognition;
-  voiceToggleInput.addEventListener("change", () => {
-    if (voiceToggleInput.checked && !appState.voiceEnabled) {
-      startVoiceCommands();
-      setVoiceHint("Voice enabled. You can say: Next, Repeat, Pause.", 2200);
-      setVoiceCommandStatus("Command mode enabled", 900);
-    } else if (!voiceToggleInput.checked && appState.voiceEnabled) {
-      stopVoiceCommands();
-      setVoiceCommandStatus("Command mode disabled", 900);
-    }
-    renderCookingIntro();
+  voiceToggleInput.addEventListener("click", (event) => {
+    event.preventDefault();
+    const nextEnabled = !appState.voiceEnabled;
+    setVoiceEnabled(nextEnabled, {
+      hintMessage: "Voice enabled. You can say: Next, Repeat, Pause.",
+      hintMs: 2200,
+      statusMessage: nextEnabled ? "Command mode enabled" : "Command mode disabled",
+      statusMs: 900
+    });
   });
 
   const slider = document.createElement("span");
@@ -987,6 +1031,7 @@ function renderCookingIntro() {
   row.append(voiceState, voiceSwitchLabel);
   voiceCard.append(voiceTitle, row);
   screen.appendChild(voiceCard);
+  appendVoiceError(screen);
 
   const actions = document.createElement("div");
   actions.className = "button-row two";
@@ -1207,14 +1252,13 @@ function renderCooking() {
   voiceToggleInput.type = "checkbox";
   voiceToggleInput.checked = appState.voiceEnabled;
   voiceToggleInput.disabled = !SpeechRecognition;
-  voiceToggleInput.addEventListener("change", () => {
-    if (voiceToggleInput.checked && !appState.voiceEnabled) {
-      startVoiceCommands();
-      setVoiceHint("Voice commands enabled. Say: Next, Repeat, Pause.", 2600);
-    } else if (!voiceToggleInput.checked && appState.voiceEnabled) {
-      stopVoiceCommands();
-    }
-    renderCooking();
+  voiceToggleInput.addEventListener("click", (event) => {
+    event.preventDefault();
+    const nextEnabled = !appState.voiceEnabled;
+    setVoiceEnabled(nextEnabled, {
+      hintMessage: "Voice commands enabled. Say: Next, Repeat, Pause.",
+      hintMs: 2600
+    });
   });
 
   const slider = document.createElement("span");
@@ -1223,6 +1267,7 @@ function renderCooking() {
   voiceSwitchLabel.append(voiceToggleInput, slider);
   voiceRow.append(voiceLabel, voiceSwitchLabel);
   screen.appendChild(voiceRow);
+  appendVoiceError(screen);
 
   if (hasTimer) {
     ensureCurrentStepTimerStarted();
@@ -1402,14 +1447,13 @@ function renderTimerActive() {
   voiceToggleInput.type = "checkbox";
   voiceToggleInput.checked = appState.voiceEnabled;
   voiceToggleInput.disabled = !SpeechRecognition;
-  voiceToggleInput.addEventListener("change", () => {
-    if (voiceToggleInput.checked && !appState.voiceEnabled) {
-      startVoiceCommands();
-      setVoiceHint("Voice commands enabled. Say: Pause, Skip timer, Next.", 2600);
-    } else if (!voiceToggleInput.checked && appState.voiceEnabled) {
-      stopVoiceCommands();
-    }
-    renderTimerActive();
+  voiceToggleInput.addEventListener("click", (event) => {
+    event.preventDefault();
+    const nextEnabled = !appState.voiceEnabled;
+    setVoiceEnabled(nextEnabled, {
+      hintMessage: "Voice commands enabled. Say: Pause, Skip timer, Next.",
+      hintMs: 2600
+    });
   });
 
   const slider = document.createElement("span");
@@ -1418,6 +1462,7 @@ function renderTimerActive() {
   voiceSwitchLabel.append(voiceToggleInput, slider);
   voiceRow.append(voiceLabel, voiceSwitchLabel);
   screen.appendChild(voiceRow);
+  appendVoiceError(screen);
 
   if (appState.lastSpokenCookingIndex !== idx) {
     speak(step.text);
