@@ -289,7 +289,7 @@ button.danger,
 
 .timer-panel {
   width: 100%;
-  min-height: 220px;
+  min-height: 150px;
   margin: 10px 0;
   padding: 24px;
   border-radius: var(--radius-lg);
@@ -307,9 +307,9 @@ button.danger,
 }
 
 .timer-panel .timer-display {
-  font-size: 56px;
+  font-size: 52px;
   line-height: 1;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: 0.02em;
 }
 
