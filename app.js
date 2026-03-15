@@ -8,6 +8,7 @@ const appState = {
   timerMessageTimeoutId: null,
   activeTimerSeconds: null,
   timerPaused: false,
+  voiceEnabled: false,
   voiceListening: false,
   voiceHeard: "",
   voiceExecuting: false,
@@ -527,7 +528,16 @@ function handleVoiceCommand(commandText) {
 }
 
 function startVoiceCommands() {
-  if (!SpeechRecognition || appState.voiceListening) {
+  if (!SpeechRecognition) {
+    appState.voiceEnabled = false;
+    renderCurrentVoiceScreen();
+    return;
+  }
+
+  appState.voiceEnabled = true;
+
+  if (appState.voiceListening) {
+    renderCurrentVoiceScreen();
     return;
   }
 
@@ -559,21 +569,31 @@ function startVoiceCommands() {
     };
 
     voiceRecognition.onstart = () => {
-      if (!appState.voiceListening) {
+      if (!appState.voiceEnabled) {
         return;
       }
+      appState.voiceListening = true;
       setVoiceCommandStatus("Listening...", 0);
       renderCurrentVoiceScreen();
     };
 
     voiceRecognition.onend = () => {
-      if (appState.voiceListening && isGuidanceScreen(appState.currentScreen)) {
+      appState.voiceListening = false;
+      if (appState.voiceEnabled && isGuidanceScreen(appState.currentScreen)) {
         setVoiceCommandStatus("Listening...", 0);
-        voiceRecognition.start();
+        try {
+          voiceRecognition.start();
+        } catch {
+          // Ignore duplicate start attempts.
+        }
+      } else {
+        setVoiceCommandStatus("", 0);
+        renderCurrentVoiceScreen();
       }
     };
 
     voiceRecognition.onerror = () => {
+      appState.voiceEnabled = false;
       appState.voiceListening = false;
       appState.voiceExecuting = false;
       setVoiceHint("Voice unavailable in this browser.", 2500);
@@ -587,17 +607,26 @@ function startVoiceCommands() {
     };
   }
 
-  appState.voiceListening = true;
+  appState.voiceListening = false;
   appState.voiceExecuting = false;
   setVoiceCommandStatus("Listening...", 0);
   if (typeof window.setVoiceMicPulse === "function") {
     window.setVoiceMicPulse(true);
   }
-  voiceRecognition.start();
+  try {
+    voiceRecognition.start();
+  } catch {
+    appState.voiceEnabled = false;
+    setVoiceCommandStatus("", 0);
+    if (typeof window.setVoiceMicPulse === "function") {
+      window.setVoiceMicPulse(false);
+    }
+  }
   renderCurrentVoiceScreen();
 }
 
 function stopVoiceCommands() {
+  appState.voiceEnabled = false;
   appState.voiceListening = false;
   appState.voiceExecuting = false;
   appState.voiceHeard = "";
@@ -606,13 +635,11 @@ function stopVoiceCommands() {
     window.setVoiceMicPulse(false);
   }
   if (voiceRecognition) {
-    voiceRecognition.onend = null;
-    voiceRecognition.stop();
-    voiceRecognition.onend = () => {
-      if (appState.voiceListening && isGuidanceScreen(appState.currentScreen)) {
-        voiceRecognition.start();
-      }
-    };
+    try {
+      voiceRecognition.stop();
+    } catch {
+      // Ignore stop errors when recognition is not active.
+    }
   }
 
   renderCurrentVoiceScreen();
@@ -928,7 +955,7 @@ function renderCookingIntro() {
 
   const voiceState = document.createElement("p");
   voiceState.className = "small";
-  voiceState.textContent = appState.voiceListening ? "Voice commands: On" : "Voice commands: Off";
+  voiceState.textContent = appState.voiceEnabled ? "Voice commands: On" : "Voice commands: Off";
 
   const voiceSwitchLabel = document.createElement("label");
   voiceSwitchLabel.className = "mic-switch";
@@ -939,14 +966,14 @@ function renderCookingIntro() {
 
   const voiceToggleInput = document.createElement("input");
   voiceToggleInput.type = "checkbox";
-  voiceToggleInput.checked = appState.voiceListening;
+  voiceToggleInput.checked = appState.voiceEnabled;
   voiceToggleInput.disabled = !SpeechRecognition;
   voiceToggleInput.addEventListener("change", () => {
-    if (voiceToggleInput.checked) {
+    if (voiceToggleInput.checked && !appState.voiceEnabled) {
       startVoiceCommands();
       setVoiceHint("Voice enabled. You can say: Next, Repeat, Pause.", 2200);
       setVoiceCommandStatus("Command mode enabled", 900);
-    } else {
+    } else if (!voiceToggleInput.checked && appState.voiceEnabled) {
       stopVoiceCommands();
       setVoiceCommandStatus("Command mode disabled", 900);
     }
@@ -1154,7 +1181,7 @@ function renderCooking() {
 
   const voiceRow = document.createElement("div");
   voiceRow.className = "header-row row-2 voice-panel";
-  if (appState.voiceListening) {
+  if (appState.voiceEnabled) {
     voiceRow.classList.add("voice-active");
   }
   const voiceLabel = document.createElement("p");
@@ -1178,13 +1205,13 @@ function renderCooking() {
 
   const voiceToggleInput = document.createElement("input");
   voiceToggleInput.type = "checkbox";
-  voiceToggleInput.checked = appState.voiceListening;
+  voiceToggleInput.checked = appState.voiceEnabled;
   voiceToggleInput.disabled = !SpeechRecognition;
   voiceToggleInput.addEventListener("change", () => {
-    if (voiceToggleInput.checked) {
+    if (voiceToggleInput.checked && !appState.voiceEnabled) {
       startVoiceCommands();
       setVoiceHint("Voice commands enabled. Say: Next, Repeat, Pause.", 2600);
-    } else {
+    } else if (!voiceToggleInput.checked && appState.voiceEnabled) {
       stopVoiceCommands();
     }
     renderCooking();
@@ -1349,7 +1376,7 @@ function renderTimerActive() {
 
   const voiceRow = document.createElement("div");
   voiceRow.className = "header-row row-2 voice-panel";
-  if (appState.voiceListening) {
+  if (appState.voiceEnabled) {
     voiceRow.classList.add("voice-active");
   }
   const voiceLabel = document.createElement("p");
@@ -1373,13 +1400,13 @@ function renderTimerActive() {
 
   const voiceToggleInput = document.createElement("input");
   voiceToggleInput.type = "checkbox";
-  voiceToggleInput.checked = appState.voiceListening;
+  voiceToggleInput.checked = appState.voiceEnabled;
   voiceToggleInput.disabled = !SpeechRecognition;
   voiceToggleInput.addEventListener("change", () => {
-    if (voiceToggleInput.checked) {
+    if (voiceToggleInput.checked && !appState.voiceEnabled) {
       startVoiceCommands();
       setVoiceHint("Voice commands enabled. Say: Pause, Skip timer, Next.", 2600);
-    } else {
+    } else if (!voiceToggleInput.checked && appState.voiceEnabled) {
       stopVoiceCommands();
     }
     renderTimerActive();
