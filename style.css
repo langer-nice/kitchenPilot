@@ -468,14 +468,24 @@ button.danger,
 }
 
 .stage-screen {
-  min-height: calc(100vh - (2 * var(--space-3)));
+  min-height: 100dvh;
+  height: 100dvh;
+  max-height: 100dvh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 28px;
-  padding: 24px 12px;
+  gap: clamp(16px, 3.5vh, 28px);
+  padding: clamp(12px, 2.2vh, 24px) 12px;
   text-align: center;
+  overflow: hidden;
+}
+
+.app:has(.stage-screen) {
+  height: 100dvh;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
 }
 
 .stage-title {
