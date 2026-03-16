@@ -189,7 +189,9 @@ function setScreen(screenName) {
         "Confirm that all ingredients are ready before you start.",
         "analysis",
         "ingredients",
-        "Continue"
+        "Continue",
+        "",
+        "STAGE 1"
       );
       break;
     case "ingredients":
@@ -201,7 +203,9 @@ function setScreen(screenName) {
         "Complete quick prep tasks before active cooking starts.",
         "ingredients",
         "preparation",
-        "Continue"
+        "Continue",
+        "",
+        "STAGE 2"
       );
       break;
     case "preparation":
@@ -960,47 +964,82 @@ function renderAnalysis() {
   screen.appendChild(actions);
 }
 
-function renderStageIntro(title, description, backScreen, continueScreen, continueLabel, helperNote) {
-  const screen = clearAndSetScreenTitle(title, description);
+function renderStageIntro(title, description, backScreen, continueScreen, continueLabel, helperNote, stageLabelText = "") {
+  appEl.innerHTML = "";
+  const screen = document.createElement("div");
+  screen.className = "screen stage-screen";
+
+  const titleEl = document.createElement("h1");
+  titleEl.className = "stage-title";
+  titleEl.textContent = title;
+
+  const stageLabel = document.createElement("p");
+  stageLabel.className = "stage-label";
+  stageLabel.textContent = stageLabelText || "";
+
+  const recipeIcon = document.createElement("div");
+  recipeIcon.className = "recipe-icon";
+  recipeIcon.setAttribute("aria-hidden", "true");
+  recipeIcon.innerHTML = '<i class="fa-solid fa-pizza-slice"></i>';
+
+  const descriptionEl = document.createElement("p");
+  descriptionEl.className = "stage-description";
+  descriptionEl.textContent = description;
+
+  screen.append(titleEl, stageLabel, recipeIcon, descriptionEl);
 
   if (helperNote) {
     const note = document.createElement("p");
-    note.className = "small";
+    note.className = "small stage-description";
     note.textContent = helperNote;
     screen.appendChild(note);
   }
 
   const actions = document.createElement("div");
-  actions.className = "button-row two";
+  actions.className = "stage-actions";
   actions.append(
-    createButton("Back", "", () => setScreen(backScreen)),
-    createButton(continueLabel || "Continue", "primary", () => setScreen(continueScreen))
+    createButton("Home", "secondary-action", () => setScreen("home"), "home"),
+    createButton("Back", "secondary-action", () => setScreen(backScreen), "back"),
+    createButton(continueLabel || "Continue", "primary primary-action", () => setScreen(continueScreen), "next")
   );
 
   screen.appendChild(actions);
+  appEl.appendChild(screen);
 }
 
 function renderCookingIntro() {
-  const screen = clearAndSetScreenTitle(
-    "Cooking Mode",
-    "Follow each step with compact controls and optional hands-free voice guidance."
-  );
+  appEl.innerHTML = "";
+  const screen = document.createElement("div");
+  screen.className = "screen stage-screen";
 
-  appendVoiceCommandStatus(screen);
+  const title = document.createElement("h1");
+  title.className = "stage-title";
+  title.textContent = "Cooking Mode";
+
+  const stageLabel = document.createElement("p");
+  stageLabel.className = "stage-label";
+  stageLabel.textContent = "STAGE 3";
+
+  const recipeIcon = document.createElement("div");
+  recipeIcon.className = "recipe-icon";
+  recipeIcon.setAttribute("aria-hidden", "true");
+  recipeIcon.innerHTML = '<i class="fa-solid fa-pizza-slice"></i>';
+
+  screen.append(title, stageLabel, recipeIcon);
 
   const voiceCard = createCard();
-  voiceCard.classList.add("compact-card");
+  voiceCard.classList.add("voice-card");
 
   const voiceTitle = document.createElement("p");
-  voiceTitle.className = "meta";
+  voiceTitle.className = "voice-card-text";
   voiceTitle.textContent = "Enable voice commands for hands-free cooking";
 
   const row = document.createElement("div");
-  row.className = "header-row";
+  row.className = "voice-row";
 
   const voiceState = document.createElement("p");
-  voiceState.className = "small";
-  voiceState.textContent = appState.voiceEnabled ? "Voice commands: On" : "Voice commands: Off";
+  voiceState.className = "voice-row-label";
+  voiceState.textContent = "Voice commands";
 
   const voiceSwitchLabel = document.createElement("label");
   voiceSwitchLabel.className = "mic-switch";
@@ -1030,17 +1069,20 @@ function renderCookingIntro() {
   voiceSwitchLabel.append(voiceToggleInput, slider);
   row.append(voiceState, voiceSwitchLabel);
   voiceCard.append(voiceTitle, row);
+  appendVoiceCommandStatus(voiceCard);
+  appendVoiceError(voiceCard);
   screen.appendChild(voiceCard);
-  appendVoiceError(screen);
 
   const actions = document.createElement("div");
-  actions.className = "button-row two";
+  actions.className = "stage-actions";
   actions.append(
-    createButton("Back", "", () => setScreen("preparationIntro"), "back"),
-    createButton("Start Cooking", "primary", () => setScreen("cooking"), "next")
+    createButton("Home", "secondary-action", () => setScreen("home"), "home"),
+    createButton("Back", "secondary-action", () => setScreen("preparationIntro"), "back"),
+    createButton("Start Cooking", "primary primary-action", () => setScreen("cooking"), "next")
   );
 
   screen.appendChild(actions);
+  appEl.appendChild(screen);
 }
 
 function renderIngredients() {

@@ -467,6 +467,118 @@ button.danger,
   font-weight: 700;
 }
 
+.stage-screen {
+  min-height: calc(100vh - (2 * var(--space-3)));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  padding: 24px 12px;
+  text-align: center;
+}
+
+.stage-title {
+  margin: 0;
+  font-size: clamp(2rem, 6.5vw, 2.25rem);
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+}
+
+.stage-label {
+  margin: -10px 0 0;
+  font-size: 0.875rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  opacity: 0.6;
+  font-weight: 600;
+}
+
+.stage-description {
+  margin: 0;
+  max-width: 320px;
+  text-align: center;
+  font-size: clamp(1rem, 4.2vw, 1.25rem);
+  line-height: 1.4;
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.recipe-icon {
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.recipe-icon i {
+  color: #fff;
+  font-size: 42px;
+}
+
+.voice-card {
+  width: 100%;
+  max-width: 420px;
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  text-align: center;
+}
+
+.voice-card-text {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+.voice-row {
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+}
+
+.voice-row-label {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.voice-card .voice-command-status,
+.voice-card .voice-status {
+  margin-top: 12px;
+}
+
+.voice-card .voice-error {
+  margin-top: 12px;
+}
+
+.stage-actions {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.stage-actions button {
+  min-height: 60px;
+}
+
+.stage-actions .secondary-action {
+  flex: 1;
+}
+
+.stage-actions .primary-action {
+  flex: 2;
+}
+
 button.inline-btn {
   width: auto;
   padding: 7px 10px;

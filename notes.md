@@ -54,3 +54,33 @@ Important UX rules:
 - Next is the main action
 - Pause is compact
 - voice control should use a compact toggle
+
+------------------
+------------------
+------------------
+
+# Session work log (2026-03-16)
+
+- Added and aligned design-system style classes (buttons, steps, timer, voice, cooking container).
+- Kept existing UI behavior while introducing reusable class aliases for safer future styling changes.
+- Timeline improvements:
+	- removed the "Focused step timeline" heading.
+	- timer indicator icon now renders in step cards and is right-aligned.
+- Cooking/Timer voice UI updates:
+	- replaced noisy listening text with visual voice panel state.
+	- added mic icon and active panel emphasis styling.
+- Timer panel updates:
+	- reduced content to icon + remaining time only.
+	- added strong running/paused visual states.
+- Cooking action buttons updates:
+	- larger tap targets (60px min height).
+	- improved spacing and primary action emphasis.
+- Voice toggle reliability fixes:
+	- introduced a single source of truth (`voiceEnabled`) for toggle intent.
+	- synchronized UI highlight, toggle checked state, and recognition lifecycle.
+	- centralized toggle behavior in one helper (`setVoiceEnabled`).
+	- improved mobile tap hit area for custom switch input.
+	- added inline voice error messages for permission/support/start failures.
+
+- Validation status:
+	- syntax/errors checked after each wave of edits; app.js and style.css were clean in editor checks.
