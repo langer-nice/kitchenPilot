@@ -891,6 +891,7 @@ function clearAndSetScreenTitle(title, subtitle) {
 
 function renderHome() {
   const screen = clearAndSetScreenTitle("KitchenPilot", "Hands-free cooking guide");
+  let isTextInputVisible = false;
 
   const card = createCard();
   const urlLabel = document.createElement("label");
@@ -909,11 +910,29 @@ function renderHome() {
   const textInput = document.createElement("textarea");
   textInput.id = "recipeText";
   textInput.placeholder = "Paste your recipe text here";
+  textInput.hidden = true;
+
+  const textToggle = document.createElement("button");
+  textToggle.type = "button";
+  textToggle.className = "text-toggle-link";
+  textToggle.textContent = "Paste recipe text instead";
+
+  function syncTextInputVisibility() {
+    textInput.hidden = !isTextInputVisible;
+    textLabel.hidden = !isTextInputVisible;
+    textToggle.textContent = isTextInputVisible ? "Hide recipe text input" : "Paste recipe text instead";
+  }
+
+  textToggle.addEventListener("click", () => {
+    isTextInputVisible = !isTextInputVisible;
+    syncTextInputVisibility();
+  });
 
   const validation = document.createElement("p");
   validation.className = "form-error";
   validation.hidden = true;
 
+  textLabel.hidden = true;
   card.append(urlLabel, urlInput, textLabel, textInput, validation);
   screen.appendChild(card);
 
@@ -924,28 +943,21 @@ function renderHome() {
   const exampleActions = document.createElement("div");
   exampleActions.className = "button-row";
 
-  const loadExampleUrlBtn = createButton("Load example URL", "", async () => {
+  const loadExampleUrlBtn = createButton("Load example URL", "", () => {
     urlInput.value = EXAMPLE_RECIPE_URL;
     textInput.value = "";
     clearValidation();
   });
 
   const loadExampleTextBtn = createButton("Load example text", "", () => {
+    isTextInputVisible = true;
+    syncTextInputVisibility();
     textInput.value = EXAMPLE_RECIPE_TEXT;
     urlInput.value = "";
     clearValidation();
   });
 
-  const copyExampleUrlBtn = createButton("Copy URL", "", async () => {
-    try {
-      await navigator.clipboard.writeText(EXAMPLE_RECIPE_URL);
-    } catch (error) {
-      console.error("Clipboard copy failed:", error);
-      alert("Could not copy the example URL.");
-    }
-  });
-
-  exampleActions.append(loadExampleUrlBtn, loadExampleTextBtn, copyExampleUrlBtn);
+  exampleActions.append(loadExampleUrlBtn, loadExampleTextBtn);
   exampleCard.append(exampleTitle, exampleActions);
   screen.appendChild(exampleCard);
 
@@ -988,17 +1000,9 @@ function renderHome() {
     }
   });
 
-  const exampleBtn = createButton("Load Example Recipe", "", () => {
-    appState.recipe = normalizeRecipeForGuidance(EXAMPLE_RECIPE);
-    initializeIngredientChecklist(appState.recipe);
-    appState.preparationIndex = 0;
-    appState.cookingIndex = 0;
-    appState.timerSkippedStepIndex = null;
-    setScreen("analysis");
-  });
-
-  actions.append(startBtn, exampleBtn);
+  actions.append(startBtn);
   screen.appendChild(actions);
+  screen.appendChild(textToggle);
 
   const clearValidation = () => {
     if (validation.hidden) {
@@ -1012,6 +1016,7 @@ function renderHome() {
 
   urlInput.addEventListener("input", clearValidation);
   textInput.addEventListener("input", clearValidation);
+  syncTextInputVisibility();
 }
 
 function renderAnalysis() {
