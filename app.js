@@ -1247,40 +1247,38 @@ function renderCooking() {
   const step = appState.recipe.cookingSteps[idx];
   const hasTimer = Number.isInteger(step.timerSeconds) && step.timerSeconds > 0;
 
-  const screen = clearAndSetScreenTitle("Cooking Mode", appState.recipe.title);
-  screen.classList.add("cooking-screen", "cooking-container");
+  appEl.innerHTML = "";
+  const screen = document.createElement("div");
+  screen.className = "screen cooking-screen cooking-container";
+  appEl.appendChild(screen);
 
-  const topRow = document.createElement("div");
-  topRow.className = "header-row row-1";
+  const top = document.createElement("section");
+  top.className = "cooking-top";
 
-  const previousBtn = createInlineButton("<", "secondary", () => goToPreviousCookingStep(), "back");
-  previousBtn.disabled = idx === 0;
-  previousBtn.setAttribute("aria-label", "Previous step");
+  const recipeName = document.createElement("p");
+  recipeName.className = "meta recipe-name";
+  recipeName.textContent = appState.recipe.title;
 
-  const meta = document.createElement("p");
-  meta.className = "meta step-indicator";
-  meta.textContent = `Step ${idx + 1} of ${total}`;
+  const stepMeta = document.createElement("p");
+  stepMeta.className = "meta step-indicator";
+  stepMeta.textContent = `Step ${idx + 1} / ${total}`;
 
-  const stopBtn = createInlineButton("Stop", "danger", () => stopCookingFlow(true), "stop");
-
-  topRow.append(previousBtn, meta, stopBtn);
-  screen.appendChild(topRow);
+  top.append(recipeName, stepMeta);
+  screen.appendChild(top);
 
   const voiceRow = document.createElement("div");
-  voiceRow.className = "header-row row-2 voice-panel";
+  voiceRow.className = "header-row row-2 voice-panel compact-voice";
   if (appState.voiceEnabled) {
     voiceRow.classList.add("voice-active");
   }
+
   const voiceLabel = document.createElement("p");
   voiceLabel.className = "meta voice-label";
-
   const voiceIcon = document.createElement("i");
   voiceIcon.className = "fa-solid fa-microphone voice-icon";
   voiceIcon.setAttribute("aria-hidden", "true");
-
   const voiceText = document.createElement("span");
-  voiceText.textContent = "Voice";
-
+  voiceText.textContent = appState.voiceListening ? "Voice listening" : "Voice";
   voiceLabel.append(voiceIcon, voiceText);
 
   const voiceSwitchLabel = document.createElement("label");
@@ -1305,20 +1303,17 @@ function renderCooking() {
 
   const slider = document.createElement("span");
   slider.className = "slider";
-
   voiceSwitchLabel.append(voiceToggleInput, slider);
   voiceRow.append(voiceLabel, voiceSwitchLabel);
   screen.appendChild(voiceRow);
+  appendVoiceCommandStatus(screen);
   appendVoiceError(screen);
 
   if (hasTimer) {
     ensureCurrentStepTimerStarted();
   }
 
-  const shouldShowTimerPanel = hasTimer;
-
-  if (shouldShowTimerPanel) {
-
+  if (hasTimer) {
     const timerCard = document.createElement("section");
     timerCard.className = "timer-panel";
     if (appState.timerStatus === "paused") {
@@ -1341,8 +1336,13 @@ function renderCooking() {
     screen.appendChild(timerCard);
   }
 
-  const card = createFocusedStepTimeline(appState.recipe.cookingSteps, idx);
-  screen.appendChild(card);
+  const focusCard = createCard();
+  focusCard.classList.add("step-focus-card");
+  const focusText = document.createElement("p");
+  focusText.className = "step-focus-text";
+  focusText.textContent = step.text;
+  focusCard.appendChild(focusText);
+  screen.appendChild(focusCard);
 
   if (!hasTimer) {
     stopTimer();
@@ -1359,43 +1359,48 @@ function renderCooking() {
     appState.lastSpokenCookingIndex = idx;
   }
 
+  const timerAllowsNext = appState.timerStatus === "completed" || appState.timerStatus === "skipped";
+
   const actionBar = document.createElement("div");
   actionBar.className = "action-bar";
-  const actionRow = document.createElement("div");
-  actionRow.className = "action-row cooking-actions";
+  const primaryRow = document.createElement("div");
+  primaryRow.className = "action-row cooking-actions primary-actions";
 
   if (hasTimer) {
-    actionRow.classList.add("timer-action-row");
-    const timerAllowsNext = appState.timerStatus === "completed" || appState.timerStatus === "skipped";
-    actionRow.append(
-      createButton(appState.timerPaused ? "Resume Timer" : "Pause Timer", "btn-compact", () => {
+    primaryRow.append(
+      createButton(appState.timerPaused ? "Resume Timer" : "Pause Timer", "primary btn-next", () => {
         toggleGuidancePause();
         renderCooking();
       }, "pause"),
-      createButton("Repeat", "btn-compact", () => repeatCurrentCookingStep(), "repeat"),
-      createButton(
-        timerAllowsNext ? "Next" : "Skip Timer",
-        "primary btn-next",
-        () => {
-          if (timerAllowsNext) {
-            goToNextCookingStep();
-          } else {
-            skipActiveTimer();
-            renderCooking();
-          }
-        },
-        timerAllowsNext ? "next" : "skip-timer"
-      )
+      createButton("Next", "primary btn-next", () => goToNextCookingStep(), "next")
     );
+    primaryRow.querySelector('[data-action="next"]').disabled = !timerAllowsNext;
   } else {
-    actionRow.classList.add("no-timer-action-row");
-    actionRow.append(
-      createButton("Repeat", "btn-compact", () => repeatCurrentCookingStep(), "repeat"),
+    primaryRow.append(
+      createButton("Repeat", "primary btn-next", () => repeatCurrentCookingStep(), "repeat"),
       createButton("Next", "primary btn-next", () => goToNextCookingStep(), "next")
     );
   }
 
-  actionBar.appendChild(actionRow);
+  const secondaryRow = document.createElement("div");
+  secondaryRow.className = "action-row secondary-actions";
+  const backBtn = createButton("Back", "ghost-action", () => goToPreviousCookingStep(), "back");
+  backBtn.disabled = idx === 0;
+  secondaryRow.append(
+    backBtn,
+    createButton("Stop", "ghost-action", () => stopCookingFlow(true), "stop")
+  );
+
+  if (hasTimer && !timerAllowsNext) {
+    secondaryRow.append(
+      createButton("Skip Timer", "ghost-action", () => {
+        skipActiveTimer();
+        renderCooking();
+      }, "skip-timer")
+    );
+  }
+
+  actionBar.append(primaryRow, secondaryRow);
   screen.appendChild(actionBar);
 }
 
@@ -1420,23 +1425,24 @@ function renderTimerActive() {
     return;
   }
 
-  const screen = clearAndSetScreenTitle("Timer Active", appState.recipe.title);
-  screen.classList.add("cooking-screen", "cooking-container");
+  appEl.innerHTML = "";
+  const screen = document.createElement("div");
+  screen.className = "screen cooking-screen cooking-container";
+  appEl.appendChild(screen);
 
-  const topRow = document.createElement("div");
-  topRow.className = "header-row row-1";
+  const top = document.createElement("section");
+  top.className = "cooking-top";
 
-  const previousBtn = createInlineButton("<", "secondary", () => setScreen("cooking"), "back");
-  previousBtn.setAttribute("aria-label", "Back to cooking step");
+  const recipeName = document.createElement("p");
+  recipeName.className = "meta recipe-name";
+  recipeName.textContent = appState.recipe.title;
 
-  const meta = document.createElement("p");
-  meta.className = "meta step-indicator";
-  meta.textContent = `Step ${idx + 1} of ${total}`;
+  const stepMeta = document.createElement("p");
+  stepMeta.className = "meta step-indicator";
+  stepMeta.textContent = `Step ${idx + 1} / ${total}`;
 
-  const stopBtn = createInlineButton("Stop", "danger", () => stopCookingFlow(true), "stop");
-
-  topRow.append(previousBtn, meta, stopBtn);
-  screen.appendChild(topRow);
+  top.append(recipeName, stepMeta);
+  screen.appendChild(top);
 
   const timerCard = document.createElement("section");
   timerCard.className = "timer-panel";
@@ -1458,11 +1464,16 @@ function renderTimerActive() {
   timerCard.append(timerIcon, timerDisplay);
   screen.appendChild(timerCard);
 
-  const card = createFocusedStepTimeline(appState.recipe.cookingSteps, idx);
-  screen.appendChild(card);
+  const focusCard = createCard();
+  focusCard.classList.add("step-focus-card");
+  const focusText = document.createElement("p");
+  focusText.className = "step-focus-text";
+  focusText.textContent = step.text;
+  focusCard.appendChild(focusText);
+  screen.appendChild(focusCard);
 
   const voiceRow = document.createElement("div");
-  voiceRow.className = "header-row row-2 voice-panel";
+  voiceRow.className = "header-row row-2 voice-panel compact-voice";
   if (appState.voiceEnabled) {
     voiceRow.classList.add("voice-active");
   }
@@ -1474,7 +1485,7 @@ function renderTimerActive() {
   voiceIcon.setAttribute("aria-hidden", "true");
 
   const voiceText = document.createElement("span");
-  voiceText.textContent = "Voice";
+  voiceText.textContent = appState.voiceListening ? "Voice listening" : "Voice";
 
   voiceLabel.append(voiceIcon, voiceText);
 
@@ -1504,6 +1515,7 @@ function renderTimerActive() {
   voiceSwitchLabel.append(voiceToggleInput, slider);
   voiceRow.append(voiceLabel, voiceSwitchLabel);
   screen.appendChild(voiceRow);
+  appendVoiceCommandStatus(screen);
   appendVoiceError(screen);
 
   if (appState.lastSpokenCookingIndex !== idx) {
@@ -1517,40 +1529,39 @@ function renderTimerActive() {
 
   const actionBar = document.createElement("div");
   actionBar.className = "action-bar";
-  const actionRow = document.createElement("div");
-  actionRow.className = "action-row cooking-actions";
-  actionRow.classList.add("timer-action-row");
+  const primaryRow = document.createElement("div");
+  primaryRow.className = "action-row cooking-actions primary-actions";
 
-  const nextBtn = createButton(
-    "Next",
-    readyForNext ? "primary btn-next" : "btn-compact",
-    () => goToNextCookingStep(),
-    "next"
-  );
+  const nextBtn = createButton("Next", "primary btn-next", () => goToNextCookingStep(), "next");
   nextBtn.disabled = !readyForNext;
 
-  const skipBtn = createButton(
-    "Skip Timer",
-    readyForNext ? "btn-compact" : "primary btn-compact",
-    () => {
-      skipActiveTimer();
-      renderTimerActive();
-    },
-    "skip-timer"
-  );
-  skipBtn.disabled = readyForNext;
-
-  actionRow.append(
-    createButton(appState.timerPaused ? "Resume Timer" : "Pause Timer", "btn-compact", () => {
+  primaryRow.append(
+    createButton(appState.timerPaused ? "Resume Timer" : "Pause Timer", "primary btn-next", () => {
       toggleGuidancePause();
       renderTimerActive();
     }, "pause"),
-    createButton("Repeat", "btn-compact", () => repeatCurrentCookingStep(), "repeat"),
-    skipBtn,
     nextBtn
   );
 
-  actionBar.appendChild(actionRow);
+  const secondaryRow = document.createElement("div");
+  secondaryRow.className = "action-row secondary-actions";
+  const backBtn = createButton("Back", "ghost-action", () => goToPreviousCookingStep(), "back");
+  backBtn.disabled = idx === 0;
+  secondaryRow.append(
+    backBtn,
+    createButton("Stop", "ghost-action", () => stopCookingFlow(true), "stop")
+  );
+
+  if (!readyForNext) {
+    secondaryRow.append(
+      createButton("Skip Timer", "ghost-action", () => {
+        skipActiveTimer();
+        renderTimerActive();
+      }, "skip-timer")
+    );
+  }
+
+  actionBar.append(primaryRow, secondaryRow);
   screen.appendChild(actionBar);
 }
 

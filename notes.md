@@ -84,3 +84,9 @@ Important UX rules:
 
 - Validation status:
 	- syntax/errors checked after each wave of edits; app.js and style.css were clean in editor checks.
+
+
+	# Apres VSC fermé
+	Analyze the project structure
+	Review current implementation
+	Review current implementation

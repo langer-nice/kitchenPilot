@@ -309,27 +309,27 @@ button.danger,
 
 .timer-panel {
   width: 100%;
-  min-height: 150px;
-  margin: 10px 0;
-  padding: 24px;
+  min-height: 84px;
+  margin: 2px 0;
+  padding: 14px 16px;
   border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
+  gap: 12px;
   align-self: stretch;
   font-family: "Poppins", sans-serif;
 }
 
 .timer-panel .timer-icon {
-  font-size: 42px;
+  font-size: 26px;
   position: relative;
 }
 
 .timer-panel .timer-display {
-  font-size: 52px;
+  font-size: 34px;
   line-height: 1;
-  font-weight: 400;
+  font-weight: 600;
   letter-spacing: 0.02em;
 }
 
@@ -377,8 +377,25 @@ button.danger,
 
 .cooking-screen,
 .cooking-container {
-  gap: 8px;
+  gap: 10px;
   height: calc(100dvh - 32px);
+  overflow: hidden;
+}
+
+.cooking-top {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 2px 4px;
+}
+
+.recipe-name {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.2;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
   overflow: hidden;
 }
 
@@ -396,10 +413,11 @@ button.danger,
 
 .step-indicator {
   margin: 0;
-  text-align: center;
-  flex: 1;
-  font-weight: 600;
+  text-align: left;
+  font-size: 1.02rem;
+  font-weight: 700;
   font-family: "Poppins", sans-serif;
+  color: var(--color-text-primary);
 }
 
 .voice-panel {
@@ -410,6 +428,11 @@ button.danger,
   border-radius: var(--radius-lg);
   padding: 12px 14px;
   background: var(--color-surface);
+}
+
+.compact-voice {
+  padding: 8px 10px;
+  border-radius: 12px;
 }
 
 .voice-panel.voice-active {
@@ -423,6 +446,7 @@ button.danger,
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  font-size: 0.9rem;
 }
 
 .voice-icon {
@@ -730,7 +754,10 @@ button:not(.primary).voice-active {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 6px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .action-row {
@@ -748,10 +775,10 @@ button:not(.primary).voice-active {
 }
 
 .cooking-actions button {
-  min-height: 60px;
+  min-height: 64px;
   padding: 14px 20px;
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 700;
   flex: 1 1 0;
   min-width: 0;
 }
@@ -764,6 +791,50 @@ button:not(.primary).voice-active {
   flex: 1.3 1 0;
   background: var(--color-primary);
   color: #fff;
+}
+
+.secondary-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.secondary-actions button {
+  min-height: 40px;
+  padding: 9px 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  flex: 1 1 0;
+}
+
+.ghost-action,
+button.ghost-action,
+.btn.ghost-action {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.ghost-action:hover,
+button.ghost-action:hover,
+.btn.ghost-action:hover {
+  background: #f2f4f8;
+}
+
+.step-focus-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: clamp(170px, 30vh, 300px);
+  padding: clamp(20px, 3.2vh, 32px);
+}
+
+.step-focus-text {
+  margin: 0;
+  font-family: "Poppins", sans-serif;
+  font-size: clamp(1.35rem, 4.8vw, 2rem);
+  line-height: 1.35;
+  font-weight: 700;
 }
 
 .timer-action-row {
