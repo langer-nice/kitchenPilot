@@ -195,6 +195,68 @@ button.danger,
   padding-left: 1.2rem;
 }
 
+.ingredient-checklist {
+  list-style: none;
+  padding-left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ingredient-item {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fbfbfb;
+  transition: opacity 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+.ingredient-item.checked {
+  opacity: 0.68;
+  background: #f1f4f8;
+}
+
+.ingredient-option {
+  min-height: 56px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.ingredient-option input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.ingredient-text {
+  line-height: 1.35;
+  font-weight: 600;
+}
+
+.ingredient-item.checked .ingredient-text {
+  text-decoration: line-through;
+}
+
+.ingredient-status {
+  margin-top: 14px;
+  margin-bottom: 14px;
+}
+
+.ingredient-status.ingredients-ready {
+  background: #e7fff0;
+  border-color: #88d3a8;
+  color: #145f32;
+}
+
+.ingredient-status.ingredients-missing {
+  background: #fff4d9;
+  border-color: #f0ce74;
+  color: #704f00;
+}
+
 .instruction {
   font-size: 1.5rem;
   line-height: 1.4;

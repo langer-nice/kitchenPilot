@@ -90,3 +90,56 @@ Important UX rules:
 	Analyze the project structure
 	Review current implementation
 	Review current implementation
+
+	You are working on an existing project called KitchenPilot.
+
+KitchenPilot is a mobile-first, hands-free cooking assistant.
+
+CORE FEATURES:
+- Users input a recipe via URL or raw text
+- The app parses the recipe into structured data (title, ingredients, steps)
+- There is a Cooking Mode that guides the user step-by-step
+- Voice commands allow hands-free navigation (next, repeat, etc.)
+- Timers may be triggered based on steps
+
+IMPORTANT:
+This project already exists.
+Do NOT recreate the project.
+Do NOT rewrite everything.
+
+YOUR TASK:
+
+1. Analyze the entire project structure
+- list main folders and files
+- identify key components
+
+2. Identify where these features are implemented:
+- homepage (URL / text input)
+- recipe parsing logic
+- cooking mode UI
+- step navigation
+- voice control (if present)
+
+3. Explain how the data flows:
+- from input → parsing → UI → cooking mode
+
+4. Identify potential issues or missing pieces:
+- broken logic
+- incomplete features
+- unclear structure
+
+5. DO NOT make any changes yet
+
+OUTPUT FORMAT:
+- Clear structured explanation
+- Short sections
+- No code changes
+
+IMPORTANT RULES:
+- Only analyze
+- Do not modify anything
+- Do not generate new files
+
+
+# Apres
+Please focus on the Cooking Mode implementation and explain how it works in detail.

@@ -1,6 +1,7 @@
 const appState = {
   currentScreen: "home",
   recipe: null,
+  ingredientChecks: [],
   preparationIndex: 0,
   cookingIndex: 0,
   timerMessage: "",
@@ -24,6 +25,27 @@ const appState = {
 const appEl = document.getElementById("app");
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let voiceRecognition = null;
+
+const EXAMPLE_RECIPE_URL = "https://www.bbcgoodfood.com/recipes/spaghetti-aglio-e-olio";
+const EXAMPLE_RECIPE_TEXT = `Spaghetti Aglio e Olio
+
+Ingredients:
+200g spaghetti
+3 cloves garlic
+4 tbsp olive oil
+Salt
+Chili flakes (optional)
+Parsley (optional)
+
+Instructions:
+1. Bring a large pot of salted water to a boil.
+2. Cook the spaghetti according to package instructions.
+3. Meanwhile, heat olive oil in a pan over medium heat.
+4. Add sliced garlic and cook until lightly golden.
+5. Add chili flakes if desired.
+6. Drain the pasta and add it to the pan.
+7. Toss well and cook for 1-2 minutes.
+8. Serve with parsley.`;
 
 function setTimerStatus(nextStatus, reason) {
   if (appState.timerStatus !== nextStatus) {
@@ -254,6 +276,38 @@ function normalizeRecipeForGuidance(recipe) {
   const cloned = JSON.parse(JSON.stringify(recipe));
   cloned.preparationSteps = splitPreparationActions(cloned.preparationSteps || []);
   return cloned;
+}
+
+function initializeIngredientChecklist(recipe) {
+  const ingredients = Array.isArray(recipe?.ingredients) ? recipe.ingredients : [];
+  appState.ingredientChecks = ingredients.map(() => false);
+}
+
+function setIngredientChecked(index, checked) {
+  if (!Array.isArray(appState.ingredientChecks) || index < 0 || index >= appState.ingredientChecks.length) {
+    return;
+  }
+
+  appState.ingredientChecks[index] = Boolean(checked);
+}
+
+function toggleIngredientChecked(index) {
+  if (!Array.isArray(appState.ingredientChecks) || index < 0 || index >= appState.ingredientChecks.length) {
+    return;
+  }
+
+  appState.ingredientChecks[index] = !appState.ingredientChecks[index];
+}
+
+function areAllIngredientsReady() {
+  return Array.isArray(appState.ingredientChecks) &&
+    appState.ingredientChecks.length > 0 &&
+    appState.ingredientChecks.every(Boolean);
+}
+
+function hasUncheckedIngredients() {
+  return Array.isArray(appState.ingredientChecks) &&
+    appState.ingredientChecks.some((checked) => !checked);
 }
 
 function getCurrentCookingStep() {
@@ -863,6 +917,38 @@ function renderHome() {
   card.append(urlLabel, urlInput, textLabel, textInput, validation);
   screen.appendChild(card);
 
+  const exampleCard = createCard();
+  const exampleTitle = document.createElement("h2");
+  exampleTitle.textContent = "Load example recipe";
+
+  const exampleActions = document.createElement("div");
+  exampleActions.className = "button-row";
+
+  const loadExampleUrlBtn = createButton("Load example URL", "", async () => {
+    urlInput.value = EXAMPLE_RECIPE_URL;
+    textInput.value = "";
+    clearValidation();
+  });
+
+  const loadExampleTextBtn = createButton("Load example text", "", () => {
+    textInput.value = EXAMPLE_RECIPE_TEXT;
+    urlInput.value = "";
+    clearValidation();
+  });
+
+  const copyExampleUrlBtn = createButton("Copy URL", "", async () => {
+    try {
+      await navigator.clipboard.writeText(EXAMPLE_RECIPE_URL);
+    } catch (error) {
+      console.error("Clipboard copy failed:", error);
+      alert("Could not copy the example URL.");
+    }
+  });
+
+  exampleActions.append(loadExampleUrlBtn, loadExampleTextBtn, copyExampleUrlBtn);
+  exampleCard.append(exampleTitle, exampleActions);
+  screen.appendChild(exampleCard);
+
   const actions = document.createElement("div");
   actions.className = "button-row";
 
@@ -888,6 +974,7 @@ function renderHome() {
       const recipe = normalizeRecipeForGuidance(parsedRecipe);
 
       appState.recipe = recipe;
+      initializeIngredientChecklist(recipe);
       appState.preparationIndex = 0;
       appState.cookingIndex = 0;
       appState.timerSkippedStepIndex = null;
@@ -903,6 +990,7 @@ function renderHome() {
 
   const exampleBtn = createButton("Load Example Recipe", "", () => {
     appState.recipe = normalizeRecipeForGuidance(EXAMPLE_RECIPE);
+    initializeIngredientChecklist(appState.recipe);
     appState.preparationIndex = 0;
     appState.cookingIndex = 0;
     appState.timerSkippedStepIndex = null;
@@ -1091,19 +1179,55 @@ function renderIngredients() {
     return;
   }
 
+  if (!Array.isArray(appState.ingredientChecks) || appState.ingredientChecks.length !== appState.recipe.ingredients.length) {
+    initializeIngredientChecklist(appState.recipe);
+  }
+
   const screen = clearAndSetScreenTitle("Ingredient Check", "Verify ingredients before you begin");
 
   const card = createCard();
   const list = document.createElement("ul");
-  list.className = "list";
+  list.className = "list ingredient-checklist";
 
-  appState.recipe.ingredients.forEach((ingredient) => {
+  appState.recipe.ingredients.forEach((ingredient, index) => {
     const li = document.createElement("li");
-    li.textContent = ingredient;
+    li.className = "ingredient-item";
+
+    const label = document.createElement("label");
+    label.className = "ingredient-option";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = Boolean(appState.ingredientChecks[index]);
+    checkbox.setAttribute("aria-label", ingredient);
+    checkbox.addEventListener("change", () => {
+      setIngredientChecked(index, checkbox.checked);
+      renderIngredients();
+    });
+
+    const text = document.createElement("span");
+    text.className = "ingredient-text";
+    text.textContent = ingredient;
+
+    if (appState.ingredientChecks[index]) {
+      li.classList.add("checked");
+    }
+
+    label.append(checkbox, text);
+    li.appendChild(label);
     list.appendChild(li);
   });
 
-  card.appendChild(list);
+  const status = document.createElement("p");
+  status.className = `notice ingredient-status ${areAllIngredientsReady() ? "ingredients-ready" : "ingredients-missing"}`;
+  status.textContent = areAllIngredientsReady() ? "All ingredients ready" : "You are missing ingredients";
+
+  const markAllBtn = createButton("Mark all as ready", "", () => {
+    appState.ingredientChecks = appState.recipe.ingredients.map(() => true);
+    renderIngredients();
+  });
+
+  card.append(list, status, markAllBtn);
   screen.appendChild(card);
 
   const actions = document.createElement("div");
@@ -1582,6 +1706,7 @@ function renderCompleted() {
       appState.preparationIndex = 0;
       appState.cookingIndex = 0;
       appState.timerSkippedStepIndex = null;
+      initializeIngredientChecklist(appState.recipe);
       setScreen("ingredientsIntro");
     }),
     createButton("Save Recipe", "", () => {
