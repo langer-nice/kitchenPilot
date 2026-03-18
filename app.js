@@ -27,7 +27,32 @@ const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecogni
 let voiceRecognition = null;
 
 const EXAMPLE_RECIPE_URL = "https://www.bbcgoodfood.com/recipes/spaghetti-aglio-e-olio";
-const EXAMPLE_RECIPE_TEXT = `Spaghetti Aglio e Olio
+// Dev Mode switch:
+// - true  = load the short-timer example recipe for faster testing
+// - false = load the normal realistic example recipe
+const DEV_MODE = true;
+
+const NORMAL_EXAMPLE_RECIPE_TEXT = `Spaghetti Aglio e Olio
+
+Ingredients:
+200g spaghetti
+3 cloves garlic
+4 tbsp olive oil
+Salt
+Chili flakes (optional)
+Parsley (optional)
+
+Instructions:
+1. Bring a large pot of salted water to a boil.
+2. Cook the spaghetti according to package instructions.
+3. Meanwhile, heat olive oil in a pan over medium heat.
+4. Add sliced garlic and cook until lightly golden.
+5. Add chili flakes if desired.
+6. Drain the pasta and add it to the pan.
+7. Toss well and cook for 1-2 minutes.
+8. Serve with parsley.`;
+
+const DEV_EXAMPLE_RECIPE_TEXT = `Spaghetti Aglio e Olio
 
 Ingredients:
 200g spaghetti
@@ -46,6 +71,8 @@ Instructions:
 6. Drain the pasta and add it to the pan.
 7. Toss well and cook for 10 seconds.
 8. Serve with parsley.`;
+
+const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 const timerDoneAudio = typeof Audio !== "undefined" ? new Audio("assets/timer-done.wav") : null;
 
 if (timerDoneAudio) {
