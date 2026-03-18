@@ -185,6 +185,9 @@ function renderCurrentVoiceScreen() {
   if (appState.currentScreen === "ingredients") {
     renderIngredients();
   }
+  if (appState.currentScreen === "preparationIntro") {
+    renderPreparationIntro();
+  }
   if (appState.currentScreen === "preparation") {
     renderPreparation();
   }
@@ -231,9 +234,7 @@ function pulseVoiceRecognitionActivity(durationMs = 700) {
 
   appState.voiceUserSpeakingTimeoutId = window.setTimeout(() => {
     appState.voiceUserSpeakingTimeoutId = null;
-    if (!appState.voiceListening) {
-      setVoiceUserSpeaking(false);
-    }
+    setVoiceUserSpeaking(false);
   }, durationMs);
 }
 
@@ -336,6 +337,8 @@ function runVoiceAction(actionName, commandLabel, action, delayMs = 110) {
 function isGuidanceScreen(screenName) {
   return screenName === "ingredientsIntro" ||
     screenName === "ingredients" ||
+    screenName === "preparationIntro" ||
+    screenName === "preparation" ||
     screenName === "cooking" ||
     screenName === "timerActive" ||
     screenName === "cookingIntro";
@@ -379,15 +382,7 @@ function setScreen(screenName) {
       renderIngredients();
       break;
     case "preparationIntro":
-      renderStageIntro(
-        "Preparation",
-        "Complete quick prep tasks before active cooking starts.",
-        "ingredients",
-        "preparation",
-        "Continue",
-        "",
-        "STAGE 2"
-      );
+      renderPreparationIntro();
       break;
     case "preparation":
       renderPreparation();
@@ -749,6 +744,22 @@ function handleVoiceCommand(commandText) {
     if (command.includes("back")) {
       runVoiceAction("back", "Back", () => {
         setScreen("analysis");
+      });
+      return;
+    }
+  }
+
+  if (appState.currentScreen === "preparationIntro") {
+    if (command.includes("next") || command.includes("continue") || command.includes("start")) {
+      runVoiceAction("next", "Continue", () => {
+        setScreen("preparation");
+      });
+      return;
+    }
+
+    if (command.includes("back")) {
+      runVoiceAction("back", "Back", () => {
+        setScreen("ingredients");
       });
       return;
     }
@@ -1182,6 +1193,9 @@ function openVoiceSettingsModal(targetScreen) {
       if (targetScreen === "ingredients") {
         renderIngredients();
       }
+      if (targetScreen === "preparation") {
+        renderPreparation();
+      }
     }
   );
 
@@ -1189,6 +1203,9 @@ function openVoiceSettingsModal(targetScreen) {
     overlay.remove();
     if (targetScreen === "ingredients") {
       renderIngredients();
+    }
+    if (targetScreen === "preparation") {
+      renderPreparation();
     }
     if (targetScreen === "cooking") {
       renderCooking();
@@ -1626,6 +1643,43 @@ function renderIngredientsIntro() {
   appEl.appendChild(screen);
 }
 
+function renderPreparationIntro() {
+  appEl.innerHTML = "";
+  const screen = document.createElement("div");
+  screen.className = "screen stage-screen";
+
+  const title = document.createElement("h1");
+  title.className = "stage-title";
+  title.textContent = "Preparation";
+
+  const stageLabel = document.createElement("p");
+  stageLabel.className = "stage-label";
+  stageLabel.textContent = "STAGE 2";
+
+  const recipeIcon = document.createElement("div");
+  recipeIcon.className = "recipe-icon";
+  recipeIcon.setAttribute("aria-hidden", "true");
+  recipeIcon.innerHTML = '<i class="fa-solid fa-pizza-slice"></i>';
+
+  const description = document.createElement("p");
+  description.className = "stage-description";
+  description.textContent = "Complete quick prep tasks before active cooking starts.";
+
+  screen.append(title, stageLabel, recipeIcon, description);
+  screen.appendChild(createVoiceActivationCard("Voice enabled. You can say: Next, Repeat, Back."));
+
+  const actions = document.createElement("div");
+  actions.className = "stage-actions";
+  actions.append(
+    createButton("Home", "secondary-action", () => setScreen("home"), "home"),
+    createButton("Back", "secondary-action", () => setScreen("ingredients"), "back"),
+    createButton("Continue", "primary primary-action", () => setScreen("preparation"), "next")
+  );
+
+  screen.appendChild(actions);
+  appEl.appendChild(screen);
+}
+
 function renderCookingIntro() {
   appEl.innerHTML = "";
   const screen = document.createElement("div");
@@ -1747,6 +1801,8 @@ function renderPreparation() {
   const currentText = appState.recipe.preparationSteps[idx];
 
   const { content, footer } = createTitledPage("Preparation", `Preparation ${idx + 1} of ${total}`, "page-shell--guided");
+  content.appendChild(createVoiceIndicatorBar("preparation"));
+  appendVoiceError(content);
 
   const card = createCard();
   const text = document.createElement("p");
