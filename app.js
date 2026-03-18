@@ -25,7 +25,9 @@ const appState = {
   voiceUserSpeakingTimeoutId: null,
   voiceIngredientHighlightIndex: null,
   voiceIngredientHighlightTimeoutId: null,
-  timerSkippedStepIndex: null
+  timerSkippedStepIndex: null,
+  deferInitialPreparationSpeech: false,
+  preparationSpeechFrameId: null
 };
 
 const appEl = document.getElementById("app");
@@ -244,6 +246,13 @@ function clearVoiceRecognitionActivity() {
   setVoiceUserSpeaking(false);
 }
 
+function clearDeferredPreparationSpeech() {
+  if (appState.preparationSpeechFrameId !== null) {
+    window.cancelAnimationFrame(appState.preparationSpeechFrameId);
+    appState.preparationSpeechFrameId = null;
+  }
+}
+
 function resetVoiceActivityState() {
   clearVoiceRecognitionActivity();
   setVoiceOutputSpeaking(false);
@@ -379,6 +388,7 @@ function setScreen(screenName) {
   const previousScreen = appState.currentScreen;
   appState.currentScreen = screenName;
   resetVoiceActivityState();
+  clearDeferredPreparationSpeech();
 
   if (previousScreen === "preparation" && screenName !== "preparation") {
     appState.lastSpokenPreparationIndex = null;
@@ -630,6 +640,7 @@ function openPreparationIntro() {
 
 function startPreparationFlow() {
   resetPreparationFlowState();
+  appState.deferInitialPreparationSpeech = true;
   setScreen("preparation");
 }
 
@@ -1843,7 +1854,19 @@ function renderPreparation() {
 
   if (appState.lastSpokenPreparationIndex !== idx) {
     appState.lastSpokenPreparationIndex = idx;
-    speak(currentText);
+    if (appState.deferInitialPreparationSpeech && idx === 0) {
+      appState.deferInitialPreparationSpeech = false;
+      appState.preparationSpeechFrameId = window.requestAnimationFrame(() => {
+        appState.preparationSpeechFrameId = null;
+        if (appState.currentScreen !== "preparation" || appState.preparationIndex !== idx) {
+          return;
+        }
+        speak(currentText);
+      });
+    } else {
+      appState.deferInitialPreparationSpeech = false;
+      speak(currentText);
+    }
   }
 
   const actions = document.createElement("div");
