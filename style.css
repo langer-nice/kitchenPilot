@@ -75,6 +75,36 @@ body {
   gap: var(--space-3);
 }
 
+.page-shell {
+  min-height: calc(100dvh - (var(--space-3) * 2));
+  height: calc(100dvh - (var(--space-3) * 2));
+  gap: 0;
+}
+
+.page-header {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.page-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  padding-bottom: 128px;
+  scrollbar-gutter: stable;
+}
+
+.page-shell--guided .page-content {
+  padding-top: 12px;
+  padding-bottom: 148px;
+}
+
 h1 {
   margin: 0;
   font-size: 2rem;
@@ -280,25 +310,26 @@ button.danger,
   font-weight: 700;
 }
 
-.timeline-card {
+.timeline-card,
+.step-context-card {
   overflow: hidden;
-  padding: 10px 12px;
+  padding: 8px 10px;
 }
 
 .step-timeline {
   list-style: none;
-  margin: 6px 0 0;
+  margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px;
 }
 
 .timeline-item,
 .step-item {
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 8px 10px;
+  padding: 9px 10px;
   background: #fbfbfb;
   display: flex;
   justify-content: space-between;
@@ -341,23 +372,24 @@ button.danger,
 
 .timeline-item.past,
 .step-past {
-  opacity: 0.5;
-  transform: scale(0.98);
+  opacity: 0.48;
+  transform: scale(0.985);
 }
 
 .timeline-item.past .timeline-step-text,
 .step-past .timeline-step-text {
-  font-size: 0.92rem;
+  font-size: 0.88rem;
 }
 
 .timeline-item.next,
 .step-next {
-  opacity: 0.78;
+  opacity: 0.8;
+  background: #f7f8fb;
 }
 
 .timeline-item.next .timeline-step-text,
 .step-next .timeline-step-text {
-  font-size: 1rem;
+  font-size: 0.96rem;
 }
 
 .timeline-item.current,
@@ -366,12 +398,13 @@ button.danger,
   background: var(--color-primary-light);
   border: 2px solid var(--color-primary);
   box-shadow: 0 8px 20px rgba(10, 91, 216, 0.12);
+  padding: 12px;
 }
 
 .timeline-item.current .timeline-step-text,
 .step-current .timeline-step-text {
-  font-size: 1.22rem;
-  line-height: 1.34;
+  font-size: 1.14rem;
+  line-height: 1.32;
   font-weight: 800;
 }
 
@@ -457,7 +490,6 @@ button.danger,
 .cooking-screen,
 .cooking-container {
   gap: 10px;
-  height: calc(100dvh - 32px);
   overflow: hidden;
 }
 
@@ -828,15 +860,19 @@ button:not(.primary).voice-active {
 }
 
 .action-bar {
-  position: static;
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
   margin-top: auto;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 8px;
+  border-top: 1px solid var(--border);
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   gap: 8px;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
 }
 
 .action-row {

@@ -457,7 +457,7 @@ function toggleGuidancePause() {
 
 function stopCookingFlow(requireConfirmation = false) {
   if (requireConfirmation) {
-    const confirmed = window.confirm("Stop cooking and return to home?");
+    const confirmed = window.confirm("Quit cooking and return to home?");
     if (!confirmed) {
       return;
     }
@@ -466,6 +466,11 @@ function stopCookingFlow(requireConfirmation = false) {
   stopTimer();
   appState.timerSkippedStepIndex = null;
   setScreen("home");
+}
+
+function skipTimerAndAdvance() {
+  skipActiveTimer();
+  goToNextCookingStep();
 }
 
 function handleVoiceCommand(commandText) {
@@ -582,13 +587,8 @@ function handleVoiceCommand(commandText) {
   if (command.includes("skip") && command.includes("timer")) {
     flashActionButton("skip-timer");
     markVoiceCommandExecuted("Skip Timer");
-    skipActiveTimer();
-    if (appState.currentScreen === "timerActive") {
-      renderTimerActive();
-    }
-    if (appState.currentScreen === "cooking") {
-      renderCooking();
-    }
+    skipTimerAndAdvance();
+    return;
   }
 
   if (appState.voiceListening) {
@@ -829,7 +829,7 @@ function getTimelineWindow(steps, currentIndex) {
 
 function createFocusedStepTimeline(steps, currentIndex) {
   const card = createCard();
-  card.classList.add("timeline-card");
+  card.classList.add("timeline-card", "step-context-card");
 
   const list = document.createElement("ol");
   list.className = "step-timeline";
@@ -887,6 +887,44 @@ function clearAndSetScreenTitle(title, subtitle) {
 
   appEl.appendChild(screen);
   return screen;
+}
+
+function createPageShell(screenClassName = "") {
+  appEl.innerHTML = "";
+
+  const page = document.createElement("div");
+  page.className = ["screen", "page-shell", screenClassName].filter(Boolean).join(" ");
+
+  const header = document.createElement("div");
+  header.className = "page-header";
+
+  const content = document.createElement("div");
+  content.className = "page-content";
+
+  const footer = document.createElement("div");
+  footer.className = "action-bar";
+
+  page.append(header, content, footer);
+  appEl.appendChild(page);
+
+  return { page, header, content, footer };
+}
+
+function createTitledPage(title, subtitle, screenClassName = "") {
+  const shell = createPageShell(screenClassName);
+
+  const h1 = document.createElement("h1");
+  h1.textContent = title;
+  shell.header.appendChild(h1);
+
+  if (subtitle) {
+    const p = document.createElement("p");
+    p.className = "subtitle";
+    p.textContent = subtitle;
+    shell.header.appendChild(p);
+  }
+
+  return shell;
 }
 
 function renderHome() {
@@ -1188,7 +1226,7 @@ function renderIngredients() {
     initializeIngredientChecklist(appState.recipe);
   }
 
-  const screen = clearAndSetScreenTitle("Ingredient Check", "Verify ingredients before you begin");
+  const { content, footer } = createTitledPage("Ingredient Check", "Verify ingredients before you begin");
 
   const card = createCard();
   const list = document.createElement("ul");
@@ -1233,7 +1271,7 @@ function renderIngredients() {
   });
 
   card.append(list, status, markAllBtn);
-  screen.appendChild(card);
+  content.appendChild(card);
 
   const actions = document.createElement("div");
   actions.className = "button-row two";
@@ -1241,7 +1279,7 @@ function renderIngredients() {
     createButton("Back", "", () => setScreen("ingredientsIntro")),
     createButton("Ready", "primary", () => setScreen("preparationIntro"))
   );
-  screen.appendChild(actions);
+  footer.appendChild(actions);
 }
 
 function renderPreparation() {
@@ -1260,16 +1298,16 @@ function renderPreparation() {
   const idx = appState.preparationIndex;
   const currentText = appState.recipe.preparationSteps[idx];
 
-  const screen = clearAndSetScreenTitle("Preparation", `Preparation ${idx + 1} of ${total}`);
+  const { content, footer } = createTitledPage("Preparation", `Preparation ${idx + 1} of ${total}`, "page-shell--guided");
 
-  appendVoiceCommandStatus(screen);
+  appendVoiceCommandStatus(content);
 
   const card = createCard();
   const text = document.createElement("p");
   text.className = "instruction";
   text.textContent = currentText;
   card.appendChild(text);
-  screen.appendChild(card);
+  content.appendChild(card);
 
   speak(currentText);
 
@@ -1296,7 +1334,7 @@ function renderPreparation() {
     }, "next")
   );
 
-  screen.appendChild(actions);
+  footer.appendChild(actions);
 }
 
 function startStepTimerIfNeeded(step) {
@@ -1376,10 +1414,7 @@ function renderCooking() {
   const step = appState.recipe.cookingSteps[idx];
   const hasTimer = Number.isInteger(step.timerSeconds) && step.timerSeconds > 0;
 
-  appEl.innerHTML = "";
-  const screen = document.createElement("div");
-  screen.className = "screen cooking-screen cooking-container";
-  appEl.appendChild(screen);
+  const { page, header, content, footer } = createPageShell("cooking-screen cooking-container page-shell--guided");
 
   const top = document.createElement("section");
   top.className = "cooking-top";
@@ -1393,7 +1428,7 @@ function renderCooking() {
   stepMeta.textContent = `Step ${idx + 1} / ${total}`;
 
   top.append(recipeName, stepMeta);
-  screen.appendChild(top);
+  header.appendChild(top);
 
   const voiceRow = document.createElement("div");
   voiceRow.className = "header-row row-2 voice-panel compact-voice";
@@ -1434,9 +1469,9 @@ function renderCooking() {
   slider.className = "slider";
   voiceSwitchLabel.append(voiceToggleInput, slider);
   voiceRow.append(voiceLabel, voiceSwitchLabel);
-  screen.appendChild(voiceRow);
-  appendVoiceCommandStatus(screen);
-  appendVoiceError(screen);
+  content.appendChild(voiceRow);
+  appendVoiceCommandStatus(content);
+  appendVoiceError(content);
 
   if (hasTimer) {
     ensureCurrentStepTimerStarted();
@@ -1462,16 +1497,10 @@ function renderCooking() {
 
     timerCard.append(timerIcon, timerDisplay);
 
-    screen.appendChild(timerCard);
+    content.appendChild(timerCard);
   }
 
-  const focusCard = createCard();
-  focusCard.classList.add("step-focus-card");
-  const focusText = document.createElement("p");
-  focusText.className = "step-focus-text";
-  focusText.textContent = step.text;
-  focusCard.appendChild(focusText);
-  screen.appendChild(focusCard);
+  content.appendChild(createFocusedStepTimeline(appState.recipe.cookingSteps, idx));
 
   if (!hasTimer) {
     stopTimer();
@@ -1488,22 +1517,21 @@ function renderCooking() {
     appState.lastSpokenCookingIndex = idx;
   }
 
-  const timerAllowsNext = appState.timerStatus === "completed" || appState.timerStatus === "skipped";
+  const timerInteractionActive = hasTimer && (appState.timerStatus === "running" || appState.timerStatus === "paused");
 
-  const actionBar = document.createElement("div");
-  actionBar.className = "action-bar";
   const primaryRow = document.createElement("div");
   primaryRow.className = "action-row cooking-actions primary-actions";
 
-  if (hasTimer) {
+  if (timerInteractionActive) {
     primaryRow.append(
       createButton(appState.timerPaused ? "Resume Timer" : "Pause Timer", "primary btn-next", () => {
         toggleGuidancePause();
         renderCooking();
       }, "pause"),
-      createButton("Next", "primary btn-next", () => goToNextCookingStep(), "next")
+      createButton("Skip Timer", "", () => {
+        skipTimerAndAdvance();
+      }, "skip-timer")
     );
-    primaryRow.querySelector('[data-action="next"]').disabled = !timerAllowsNext;
   } else {
     primaryRow.append(
       createButton("Repeat", "primary btn-next", () => repeatCurrentCookingStep(), "repeat"),
@@ -1517,20 +1545,10 @@ function renderCooking() {
   backBtn.disabled = idx === 0;
   secondaryRow.append(
     backBtn,
-    createButton("Stop", "ghost-action", () => stopCookingFlow(true), "stop")
+    createButton("Quit", "ghost-action", () => stopCookingFlow(true), "stop")
   );
 
-  if (hasTimer && !timerAllowsNext) {
-    secondaryRow.append(
-      createButton("Skip Timer", "ghost-action", () => {
-        skipActiveTimer();
-        renderCooking();
-      }, "skip-timer")
-    );
-  }
-
-  actionBar.append(primaryRow, secondaryRow);
-  screen.appendChild(actionBar);
+  footer.append(primaryRow, secondaryRow);
 }
 
 function renderTimerActive() {
@@ -1554,10 +1572,7 @@ function renderTimerActive() {
     return;
   }
 
-  appEl.innerHTML = "";
-  const screen = document.createElement("div");
-  screen.className = "screen cooking-screen cooking-container";
-  appEl.appendChild(screen);
+  const { header, content, footer } = createPageShell("cooking-screen cooking-container page-shell--guided");
 
   const top = document.createElement("section");
   top.className = "cooking-top";
@@ -1571,7 +1586,7 @@ function renderTimerActive() {
   stepMeta.textContent = `Step ${idx + 1} / ${total}`;
 
   top.append(recipeName, stepMeta);
-  screen.appendChild(top);
+  header.appendChild(top);
 
   const timerCard = document.createElement("section");
   timerCard.className = "timer-panel";
@@ -1591,15 +1606,9 @@ function renderTimerActive() {
   timerDisplay.textContent = formatTime(appState.activeTimerSeconds ?? step.timerSeconds);
 
   timerCard.append(timerIcon, timerDisplay);
-  screen.appendChild(timerCard);
+  content.appendChild(timerCard);
 
-  const focusCard = createCard();
-  focusCard.classList.add("step-focus-card");
-  const focusText = document.createElement("p");
-  focusText.className = "step-focus-text";
-  focusText.textContent = step.text;
-  focusCard.appendChild(focusText);
-  screen.appendChild(focusCard);
+  content.appendChild(createFocusedStepTimeline(appState.recipe.cookingSteps, idx));
 
   const voiceRow = document.createElement("div");
   voiceRow.className = "header-row row-2 voice-panel compact-voice";
@@ -1643,9 +1652,9 @@ function renderTimerActive() {
 
   voiceSwitchLabel.append(voiceToggleInput, slider);
   voiceRow.append(voiceLabel, voiceSwitchLabel);
-  screen.appendChild(voiceRow);
-  appendVoiceCommandStatus(screen);
-  appendVoiceError(screen);
+  content.appendChild(voiceRow);
+  appendVoiceCommandStatus(content);
+  appendVoiceError(content);
 
   if (appState.lastSpokenCookingIndex !== idx) {
     speak(step.text);
@@ -1654,23 +1663,27 @@ function renderTimerActive() {
 
   ensureCurrentStepTimerStarted();
 
-  const readyForNext = appState.timerStatus === "completed" || appState.timerStatus === "skipped";
+  const timerInteractionActive = appState.timerStatus === "running" || appState.timerStatus === "paused";
 
-  const actionBar = document.createElement("div");
-  actionBar.className = "action-bar";
   const primaryRow = document.createElement("div");
   primaryRow.className = "action-row cooking-actions primary-actions";
 
-  const nextBtn = createButton("Next", "primary btn-next", () => goToNextCookingStep(), "next");
-  nextBtn.disabled = !readyForNext;
-
-  primaryRow.append(
-    createButton(appState.timerPaused ? "Resume Timer" : "Pause Timer", "primary btn-next", () => {
-      toggleGuidancePause();
-      renderTimerActive();
-    }, "pause"),
-    nextBtn
-  );
+  if (timerInteractionActive) {
+    primaryRow.append(
+      createButton(appState.timerPaused ? "Resume Timer" : "Pause Timer", "primary btn-next", () => {
+        toggleGuidancePause();
+        renderTimerActive();
+      }, "pause"),
+      createButton("Skip Timer", "", () => {
+        skipTimerAndAdvance();
+      }, "skip-timer")
+    );
+  } else {
+    primaryRow.append(
+      createButton("Repeat", "primary btn-next", () => repeatCurrentCookingStep(), "repeat"),
+      createButton("Next", "primary btn-next", () => goToNextCookingStep(), "next")
+    );
+  }
 
   const secondaryRow = document.createElement("div");
   secondaryRow.className = "action-row secondary-actions";
@@ -1678,20 +1691,10 @@ function renderTimerActive() {
   backBtn.disabled = idx === 0;
   secondaryRow.append(
     backBtn,
-    createButton("Stop", "ghost-action", () => stopCookingFlow(true), "stop")
+    createButton("Quit", "ghost-action", () => stopCookingFlow(true), "stop")
   );
 
-  if (!readyForNext) {
-    secondaryRow.append(
-      createButton("Skip Timer", "ghost-action", () => {
-        skipActiveTimer();
-        renderTimerActive();
-      }, "skip-timer")
-    );
-  }
-
-  actionBar.append(primaryRow, secondaryRow);
-  screen.appendChild(actionBar);
+  footer.append(primaryRow, secondaryRow);
 }
 
 function renderCompleted() {
