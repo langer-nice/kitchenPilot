@@ -18,6 +18,7 @@ const appState = {
   voiceExecuting: false,
   voiceCommandStatus: "",
   voiceCommandStatusTimeoutId: null,
+  lastSpokenPreparationIndex: null,
   lastSpokenCookingIndex: null,
   voiceHintMessage: "",
   voiceHintTimeoutId: null,
@@ -352,7 +353,12 @@ function formatTime(totalSeconds) {
 }
 
 function setScreen(screenName) {
+  const previousScreen = appState.currentScreen;
   appState.currentScreen = screenName;
+
+  if (previousScreen === "preparation" && screenName !== "preparation") {
+    appState.lastSpokenPreparationIndex = null;
+  }
 
   if (!isGuidanceScreen(screenName)) {
     appState.timerMessage = "";
@@ -363,6 +369,7 @@ function setScreen(screenName) {
     setTimerStatus("idle", `leaving guidance to ${screenName}`);
     appState.activeTimerSeconds = null;
     appState.timerPaused = false;
+    appState.lastSpokenPreparationIndex = null;
     appState.lastSpokenCookingIndex = null;
     stopVoiceCommands();
     stopTimer();
@@ -1811,7 +1818,10 @@ function renderPreparation() {
   card.appendChild(text);
   content.appendChild(card);
 
-  speak(currentText);
+  if (appState.lastSpokenPreparationIndex !== idx) {
+    speak(currentText);
+    appState.lastSpokenPreparationIndex = idx;
+  }
 
   const actions = document.createElement("div");
   actions.className = "button-row three";
