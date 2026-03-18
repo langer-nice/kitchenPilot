@@ -176,6 +176,12 @@ function setVoiceCommandStatus(message, timeoutMs = 1200) {
 }
 
 function renderCurrentVoiceScreen() {
+  if (appState.currentScreen === "ingredientsIntro") {
+    renderIngredientsIntro();
+  }
+  if (appState.currentScreen === "ingredients") {
+    renderIngredients();
+  }
   if (appState.currentScreen === "preparation") {
     renderPreparation();
   }
@@ -277,7 +283,11 @@ function flashActionButton(actionName) {
 }
 
 function isGuidanceScreen(screenName) {
-  return screenName === "cooking" || screenName === "timerActive" || screenName === "cookingIntro";
+  return screenName === "ingredientsIntro" ||
+    screenName === "ingredients" ||
+    screenName === "cooking" ||
+    screenName === "timerActive" ||
+    screenName === "cookingIntro";
 }
 
 function formatTime(totalSeconds) {
@@ -312,15 +322,7 @@ function setScreen(screenName) {
       renderAnalysis();
       break;
     case "ingredientsIntro":
-      renderStageIntro(
-        "Ingredient Check",
-        "Confirm that all ingredients are ready before you start.",
-        "analysis",
-        "ingredients",
-        "Continue",
-        "",
-        "STAGE 1"
-      );
+      renderIngredientsIntro();
       break;
     case "ingredients":
       renderIngredients();
@@ -414,6 +416,99 @@ function areAllIngredientsReady() {
 function hasUncheckedIngredients() {
   return Array.isArray(appState.ingredientChecks) &&
     appState.ingredientChecks.some((checked) => !checked);
+}
+
+function normalizeVoiceMatchText(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getIngredientVoiceTokens(ingredient) {
+  const stopWords = new Set([
+    "g", "kg", "mg", "ml", "l", "tbsp", "tsp", "cup", "cups",
+    "oz", "lb", "lbs", "optional", "fresh", "large", "small",
+    "medium", "to", "taste"
+  ]);
+
+  return normalizeVoiceMatchText(ingredient)
+    .split(" ")
+    .filter((token) => token.length > 2 && !stopWords.has(token) && !/^\d+$/.test(token));
+}
+
+function findIngredientIndexFromVoice(commandText) {
+  if (!appState.recipe || !Array.isArray(appState.recipe.ingredients)) {
+    return -1;
+  }
+
+  const normalizedCommand = normalizeVoiceMatchText(commandText);
+  if (!normalizedCommand.includes("check")) {
+    return -1;
+  }
+
+  return appState.recipe.ingredients.findIndex((ingredient) => {
+    const normalizedIngredient = normalizeVoiceMatchText(ingredient);
+    if (normalizedIngredient && normalizedCommand.includes(normalizedIngredient)) {
+      return true;
+    }
+
+    const tokens = getIngredientVoiceTokens(ingredient);
+    if (tokens.length === 0) {
+      return false;
+    }
+
+    return tokens.some((token) => normalizedCommand.includes(token));
+  });
+}
+
+function createVoiceActivationCard(enableMessage) {
+  const voiceCard = createCard();
+  voiceCard.classList.add("voice-card");
+
+  const voiceTitle = document.createElement("p");
+  voiceTitle.className = "voice-card-text";
+  voiceTitle.textContent = enableMessage;
+
+  const row = document.createElement("div");
+  row.className = "voice-row";
+
+  const voiceState = document.createElement("p");
+  voiceState.className = "voice-row-label";
+  voiceState.textContent = "Voice commands";
+
+  const voiceSwitchLabel = document.createElement("label");
+  voiceSwitchLabel.className = "mic-switch";
+  if (appState.voiceListening) {
+    voiceSwitchLabel.classList.add("listening");
+  }
+  voiceSwitchLabel.setAttribute("aria-label", "Toggle voice commands");
+
+  const voiceToggleInput = document.createElement("input");
+  voiceToggleInput.type = "checkbox";
+  voiceToggleInput.checked = appState.voiceEnabled;
+  voiceToggleInput.disabled = !SpeechRecognition;
+  voiceToggleInput.addEventListener("click", (event) => {
+    event.preventDefault();
+    const nextEnabled = !appState.voiceEnabled;
+    setVoiceEnabled(nextEnabled, {
+      hintMessage: enableMessage,
+      hintMs: 2200,
+      statusMessage: nextEnabled ? "Command mode enabled" : "Command mode disabled",
+      statusMs: 900
+    });
+  });
+
+  const slider = document.createElement("span");
+  slider.className = "slider";
+
+  voiceSwitchLabel.append(voiceToggleInput, slider);
+  row.append(voiceState, voiceSwitchLabel);
+  voiceCard.append(voiceTitle, row);
+  appendVoiceError(voiceCard);
+  return voiceCard;
 }
 
 function getCurrentCookingStep() {
@@ -582,6 +677,44 @@ function skipTimerAndAdvance() {
 function handleVoiceCommand(commandText) {
   const command = commandText.toLowerCase();
   setVoiceCommandStatus("Processing voice command...", 700);
+
+  if (appState.currentScreen === "ingredientsIntro") {
+    if (command.includes("next") || command.includes("continue") || command.includes("start")) {
+      markVoiceCommandExecuted("Continue");
+      setScreen("ingredients");
+      return;
+    }
+
+    if (command.includes("back")) {
+      markVoiceCommandExecuted("Back");
+      setScreen("analysis");
+      return;
+    }
+  }
+
+  if (appState.currentScreen === "ingredients") {
+    const ingredientIndex = findIngredientIndexFromVoice(command);
+    if (ingredientIndex >= 0) {
+      setIngredientChecked(ingredientIndex, true);
+      markVoiceCommandExecuted("Check Ingredient");
+      renderIngredients();
+      return;
+    }
+
+    if (command.includes("next") || command.includes("ready") || command.includes("continue")) {
+      markVoiceCommandExecuted("Ready");
+      setScreen("preparationIntro");
+      return;
+    }
+
+    if (command.includes("back")) {
+      markVoiceCommandExecuted("Back");
+      setScreen("ingredientsIntro");
+      return;
+    }
+
+    return;
+  }
 
   if (command.includes("next")) {
     if (appState.currentScreen === "preparation") {
@@ -902,6 +1035,9 @@ function setVoiceHint(message, timeoutMs = 2500) {
   appState.voiceHintTimeoutId = window.setTimeout(() => {
     appState.voiceHintMessage = "";
     appState.voiceHintTimeoutId = null;
+    if (appState.currentScreen === "ingredients") {
+      renderIngredients();
+    }
     if (appState.currentScreen === "cooking") {
       renderCooking();
     }
@@ -977,11 +1113,17 @@ function openVoiceSettingsModal(targetScreen) {
       if (targetScreen === "timerActive") {
         renderTimerActive();
       }
+      if (targetScreen === "ingredients") {
+        renderIngredients();
+      }
     }
   );
 
   const closeBtn = createButton("Close", "", () => {
     overlay.remove();
+    if (targetScreen === "ingredients") {
+      renderIngredients();
+    }
     if (targetScreen === "cooking") {
       renderCooking();
     }
@@ -1381,6 +1523,43 @@ function renderStageIntro(title, description, backScreen, continueScreen, contin
   appEl.appendChild(screen);
 }
 
+function renderIngredientsIntro() {
+  appEl.innerHTML = "";
+  const screen = document.createElement("div");
+  screen.className = "screen stage-screen";
+
+  const title = document.createElement("h1");
+  title.className = "stage-title";
+  title.textContent = "Ingredient Check";
+
+  const stageLabel = document.createElement("p");
+  stageLabel.className = "stage-label";
+  stageLabel.textContent = "STAGE 1";
+
+  const recipeIcon = document.createElement("div");
+  recipeIcon.className = "recipe-icon";
+  recipeIcon.setAttribute("aria-hidden", "true");
+  recipeIcon.innerHTML = '<i class="fa-solid fa-pizza-slice"></i>';
+
+  const description = document.createElement("p");
+  description.className = "stage-description";
+  description.textContent = "Confirm that all ingredients are ready before you start.";
+
+  screen.append(title, stageLabel, recipeIcon, description);
+  screen.appendChild(createVoiceActivationCard("Voice enabled. You can say: Check garlic, check onions."));
+
+  const actions = document.createElement("div");
+  actions.className = "stage-actions";
+  actions.append(
+    createButton("Home", "secondary-action", () => setScreen("home"), "home"),
+    createButton("Back", "secondary-action", () => setScreen("analysis"), "back"),
+    createButton("Continue", "primary primary-action", () => setScreen("ingredients"), "next")
+  );
+
+  screen.appendChild(actions);
+  appEl.appendChild(screen);
+}
+
 function renderCookingIntro() {
   appEl.innerHTML = "";
   const screen = document.createElement("div");
@@ -1400,51 +1579,7 @@ function renderCookingIntro() {
   recipeIcon.innerHTML = '<i class="fa-solid fa-pizza-slice"></i>';
 
   screen.append(title, stageLabel, recipeIcon);
-
-  const voiceCard = createCard();
-  voiceCard.classList.add("voice-card");
-
-  const voiceTitle = document.createElement("p");
-  voiceTitle.className = "voice-card-text";
-  voiceTitle.textContent = "Enable voice commands for hands-free cooking";
-
-  const row = document.createElement("div");
-  row.className = "voice-row";
-
-  const voiceState = document.createElement("p");
-  voiceState.className = "voice-row-label";
-  voiceState.textContent = "Voice commands";
-
-  const voiceSwitchLabel = document.createElement("label");
-  voiceSwitchLabel.className = "mic-switch";
-  if (appState.voiceListening) {
-    voiceSwitchLabel.classList.add("listening");
-  }
-  voiceSwitchLabel.setAttribute("aria-label", "Toggle voice commands");
-
-  const voiceToggleInput = document.createElement("input");
-  voiceToggleInput.type = "checkbox";
-  voiceToggleInput.checked = appState.voiceEnabled;
-  voiceToggleInput.disabled = !SpeechRecognition;
-  voiceToggleInput.addEventListener("click", (event) => {
-    event.preventDefault();
-    const nextEnabled = !appState.voiceEnabled;
-    setVoiceEnabled(nextEnabled, {
-      hintMessage: "Voice enabled. You can say: Next, Repeat, Pause.",
-      hintMs: 2200,
-      statusMessage: nextEnabled ? "Command mode enabled" : "Command mode disabled",
-      statusMs: 900
-    });
-  });
-
-  const slider = document.createElement("span");
-  slider.className = "slider";
-
-  voiceSwitchLabel.append(voiceToggleInput, slider);
-  row.append(voiceState, voiceSwitchLabel);
-  voiceCard.append(voiceTitle, row);
-  appendVoiceError(voiceCard);
-  screen.appendChild(voiceCard);
+  screen.appendChild(createVoiceActivationCard("Voice enabled. You can say: Next, Repeat, Pause."));
 
   const actions = document.createElement("div");
   actions.className = "stage-actions";
@@ -1469,6 +1604,8 @@ function renderIngredients() {
   }
 
   const { content, footer } = createTitledPage("Ingredient Check", "Verify ingredients before you begin");
+  content.appendChild(createVoiceIndicatorBar("ingredients"));
+  appendVoiceError(content);
 
   const card = createCard();
   const list = document.createElement("ul");
