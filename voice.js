@@ -11,6 +11,15 @@ function speak(text) {
   utterance.rate = 1;
   utterance.pitch = 1;
   utterance.lang = "en-US";
+  utterance.onstart = () => {
+    window.dispatchEvent(new CustomEvent("kitchenpilot:voice-speech-start"));
+  };
+  utterance.onend = () => {
+    window.dispatchEvent(new CustomEvent("kitchenpilot:voice-speech-end"));
+  };
+  utterance.onerror = () => {
+    window.dispatchEvent(new CustomEvent("kitchenpilot:voice-speech-end"));
+  };
 
   window.speechSynthesis.cancel();
   window.speechSynthesis.speak(utterance);

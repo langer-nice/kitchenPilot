@@ -11,6 +11,8 @@ const appState = {
   timerPaused: false,
   voiceEnabled: false,
   voiceListening: false,
+  voiceUserSpeaking: false,
+  voiceOutputSpeaking: false,
   voiceErrorMessage: "",
   voiceHeard: "",
   voiceExecuting: false,
@@ -148,11 +150,15 @@ function setVoiceCommandStatus(message, timeoutMs = 1200) {
   }
 
   if (!timeoutMs) {
+    if (!message) {
+      appState.voiceExecuting = false;
+    }
     return;
   }
 
   appState.voiceCommandStatusTimeoutId = window.setTimeout(() => {
     appState.voiceCommandStatus = appState.voiceListening ? "Listening..." : "";
+    appState.voiceExecuting = false;
     appState.voiceCommandStatusTimeoutId = null;
     if (appState.currentScreen === "preparation") {
       renderPreparation();
@@ -170,10 +176,6 @@ function setVoiceCommandStatus(message, timeoutMs = 1200) {
 }
 
 function renderCurrentVoiceScreen() {
-  if (typeof window.setVoiceMicPulse === "function") {
-    window.setVoiceMicPulse(appState.voiceListening);
-  }
-
   if (appState.currentScreen === "preparation") {
     renderPreparation();
   }
@@ -192,6 +194,28 @@ function markVoiceCommandExecuted(commandLabel) {
   appState.voiceExecuting = true;
   appState.voiceHeard = commandLabel || "";
   setVoiceCommandStatus(`Executing: ${commandLabel || "command"}`, 650);
+}
+
+function isVoiceUiActive() {
+  return Boolean(appState.voiceUserSpeaking || appState.voiceOutputSpeaking || appState.voiceExecuting);
+}
+
+function setVoiceUserSpeaking(isSpeaking) {
+  const nextValue = Boolean(isSpeaking);
+  if (appState.voiceUserSpeaking === nextValue) {
+    return;
+  }
+  appState.voiceUserSpeaking = nextValue;
+  renderCurrentVoiceScreen();
+}
+
+function setVoiceOutputSpeaking(isSpeaking) {
+  const nextValue = Boolean(isSpeaking);
+  if (appState.voiceOutputSpeaking === nextValue) {
+    return;
+  }
+  appState.voiceOutputSpeaking = nextValue;
+  renderCurrentVoiceScreen();
 }
 
 function appendVoiceCommandStatus(screen) {
@@ -709,6 +733,7 @@ function startVoiceCommands() {
       }
 
       appState.voiceHeard = transcript;
+      appState.voiceUserSpeaking = false;
       const heardLabel = transcript.length > 26 ? `${transcript.slice(0, 26)}...` : transcript;
       setVoiceCommandStatus(`Heard: ${heardLabel}`, 1000);
       renderCurrentVoiceScreen();
@@ -723,12 +748,25 @@ function startVoiceCommands() {
         return;
       }
       appState.voiceListening = true;
+      appState.voiceUserSpeaking = false;
       setVoiceCommandStatus("Listening...", 0);
       renderCurrentVoiceScreen();
     };
 
+    voiceRecognition.onspeechstart = () => {
+      if (!appState.voiceEnabled) {
+        return;
+      }
+      setVoiceUserSpeaking(true);
+    };
+
+    voiceRecognition.onspeechend = () => {
+      setVoiceUserSpeaking(false);
+    };
+
     voiceRecognition.onend = () => {
       appState.voiceListening = false;
+      appState.voiceUserSpeaking = false;
       if (appState.voiceEnabled && isGuidanceScreen(appState.currentScreen)) {
         setVoiceCommandStatus("Listening...", 0);
         try {
@@ -745,6 +783,8 @@ function startVoiceCommands() {
     voiceRecognition.onerror = (event) => {
       appState.voiceEnabled = false;
       appState.voiceListening = false;
+      appState.voiceUserSpeaking = false;
+      appState.voiceOutputSpeaking = false;
       appState.voiceExecuting = false;
       const code = event && event.error ? String(event.error) : "";
       if (code === "not-allowed" || code === "service-not-allowed") {
@@ -766,20 +806,16 @@ function startVoiceCommands() {
   }
 
   appState.voiceListening = false;
+  appState.voiceUserSpeaking = false;
+  appState.voiceOutputSpeaking = false;
   appState.voiceExecuting = false;
   setVoiceCommandStatus("Listening...", 0);
-  if (typeof window.setVoiceMicPulse === "function") {
-    window.setVoiceMicPulse(true);
-  }
   try {
     voiceRecognition.start();
   } catch {
     appState.voiceEnabled = false;
     appState.voiceErrorMessage = "Could not start voice input. Check microphone permission and try again.";
     setVoiceCommandStatus("", 0);
-    if (typeof window.setVoiceMicPulse === "function") {
-      window.setVoiceMicPulse(false);
-    }
   }
   renderCurrentVoiceScreen();
 }
@@ -787,13 +823,12 @@ function startVoiceCommands() {
 function stopVoiceCommands() {
   appState.voiceEnabled = false;
   appState.voiceListening = false;
+  appState.voiceUserSpeaking = false;
+  appState.voiceOutputSpeaking = false;
   appState.voiceErrorMessage = "";
   appState.voiceExecuting = false;
   appState.voiceHeard = "";
   setVoiceCommandStatus("", 0);
-  if (typeof window.setVoiceMicPulse === "function") {
-    window.setVoiceMicPulse(false);
-  }
   if (voiceRecognition) {
     try {
       voiceRecognition.stop();
@@ -854,12 +889,8 @@ function createVoiceIndicatorBar(targetScreen) {
   const trigger = document.createElement("button");
   trigger.type = "button";
   trigger.className = "voice-indicator-bar";
-  if (appState.voiceEnabled) {
-    trigger.classList.add("voice-enabled");
-  }
-  if (appState.voiceListening || appState.voiceExecuting) {
-    trigger.classList.add("voice-active");
-  }
+  const voiceStateClass = !appState.voiceEnabled ? "voice-off" : isVoiceUiActive() ? "voice-active" : "voice-idle";
+  trigger.classList.add(voiceStateClass);
   trigger.setAttribute("aria-label", "Open voice settings");
 
   const bars = document.createElement("div");
@@ -894,12 +925,12 @@ function openVoiceSettingsModal(targetScreen) {
 
   const status = document.createElement("p");
   status.className = "voice-modal-copy";
-  if (appState.voiceListening) {
-    status.textContent = "Voice is listening.";
-  } else if (appState.voiceEnabled) {
-    status.textContent = "Voice commands are enabled.";
+  if (!appState.voiceEnabled) {
+    status.textContent = "Voice commands are off.";
+  } else if (isVoiceUiActive()) {
+    status.textContent = "Voice is active right now.";
   } else {
-    status.textContent = "Voice commands are disabled.";
+    status.textContent = "Voice is on and ready.";
   }
 
   const toggleBtn = createButton(
@@ -1386,7 +1417,6 @@ function renderCookingIntro() {
   voiceSwitchLabel.append(voiceToggleInput, slider);
   row.append(voiceState, voiceSwitchLabel);
   voiceCard.append(voiceTitle, row);
-  appendVoiceCommandStatus(voiceCard);
   appendVoiceError(voiceCard);
   screen.appendChild(voiceCard);
 
@@ -1485,8 +1515,6 @@ function renderPreparation() {
   const currentText = appState.recipe.preparationSteps[idx];
 
   const { content, footer } = createTitledPage("Preparation", `Preparation ${idx + 1} of ${total}`, "page-shell--guided");
-
-  appendVoiceCommandStatus(content);
 
   const card = createCard();
   const text = document.createElement("p");
@@ -1624,7 +1652,6 @@ function renderCooking() {
   header.appendChild(top);
 
   content.appendChild(createVoiceIndicatorBar("cooking"));
-  appendVoiceCommandStatus(content);
   appendVoiceError(content);
 
   if (hasTimer) {
@@ -1787,7 +1814,6 @@ function renderTimerActive() {
   content.appendChild(createFocusedStepTimeline(appState.recipe.cookingSteps, idx));
 
   content.appendChild(createVoiceIndicatorBar("timerActive"));
-  appendVoiceCommandStatus(content);
   appendVoiceError(content);
 
   if (appState.lastSpokenCookingIndex !== idx) {
@@ -1887,6 +1913,14 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
     toggleGuidancePause();
   }
+});
+
+window.addEventListener("kitchenpilot:voice-speech-start", () => {
+  setVoiceOutputSpeaking(true);
+});
+
+window.addEventListener("kitchenpilot:voice-speech-end", () => {
+  setVoiceOutputSpeaking(false);
 });
 
 setScreen("home");

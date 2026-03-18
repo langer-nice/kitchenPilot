@@ -582,24 +582,24 @@ button.danger,
 
 .voice-indicator-bar {
   width: 100%;
-  min-height: 56px;
-  border: 1px solid var(--color-border);
+  min-height: 48px;
+  border: 1px solid transparent;
   border-radius: 14px;
-  background: linear-gradient(180deg, #ffffff 0%, #f7f9fc 100%);
+  background: rgba(233, 237, 244, 0.72);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 12px 16px;
+  padding: 10px 16px;
   margin: 0;
   appearance: none;
   -webkit-appearance: none;
   color: inherit;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  box-shadow: none;
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
 }
 
 .voice-indicator-bar:hover {
-  border-color: #cad6e8;
+  background: rgba(226, 231, 240, 0.92);
 }
 
 .voice-indicator-bar:active {
@@ -611,16 +611,21 @@ button.danger,
   outline-offset: 2px;
 }
 
-.voice-indicator-bar.voice-enabled {
-  border-color: #c8d7f8;
+.voice-indicator-bar.voice-off {
+  background: rgba(232, 235, 241, 0.6);
+  opacity: 0.82;
+}
+
+.voice-indicator-bar.voice-idle {
+  background: rgba(236, 241, 249, 0.85);
+  border-color: rgba(184, 198, 222, 0.4);
 }
 
 .voice-indicator-bar.voice-active {
-  background: linear-gradient(180deg, #eef8f2 0%, #e4f6eb 100%);
-  border-color: #8fd0ab;
-  box-shadow:
-    0 0 0 1px rgba(47, 191, 113, 0.08),
-    0 8px 18px rgba(47, 191, 113, 0.08);
+  background:
+    linear-gradient(90deg, rgba(232, 248, 255, 0.95) 0%, rgba(233, 246, 240, 0.95) 52%, rgba(242, 240, 255, 0.92) 100%);
+  border-color: rgba(125, 190, 163, 0.36);
+  box-shadow: 0 10px 24px rgba(99, 160, 176, 0.12);
 }
 
 .voice-bars {
@@ -628,50 +633,63 @@ button.danger,
   align-items: flex-end;
   justify-content: center;
   gap: 5px;
-  min-height: 24px;
+  min-height: 20px;
 }
 
 .voice-bar {
   width: 5px;
-  height: 14px;
+  height: 12px;
   border-radius: 999px;
-  background: var(--color-primary);
-  opacity: 0.78;
+  background: rgba(83, 106, 148, 0.72);
+  opacity: 1;
   transform-origin: center bottom;
-  animation: voice-bars-idle 1.6s ease-in-out infinite;
+  transform: scaleY(0.85);
 }
 
 .voice-bar:nth-child(2) {
-  animation-delay: 0.12s;
+  height: 15px;
 }
 
 .voice-bar:nth-child(3) {
-  animation-delay: 0.24s;
+  height: 18px;
 }
 
 .voice-bar:nth-child(4) {
-  animation-delay: 0.36s;
+  height: 15px;
 }
 
 .voice-bar:nth-child(5) {
-  animation-delay: 0.48s;
+  height: 12px;
+}
+
+.voice-indicator-bar.voice-off .voice-bar {
+  background: rgba(130, 140, 158, 0.5);
+}
+
+.voice-indicator-bar.voice-idle .voice-bar {
+  background: rgba(88, 118, 171, 0.72);
 }
 
 .voice-indicator-bar.voice-active .voice-bar {
   background: var(--color-secondary);
   opacity: 0.92;
-  animation-name: voice-bars-active;
-  animation-duration: 0.48s;
+  animation: voice-bars-active 0.5s ease-in-out infinite;
 }
 
-@keyframes voice-bars-idle {
-  0%,
-  100% {
-    transform: scaleY(0.55);
-  }
-  50% {
-    transform: scaleY(0.95);
-  }
+.voice-indicator-bar.voice-active .voice-bar:nth-child(2) {
+  animation-delay: 0.08s;
+}
+
+.voice-indicator-bar.voice-active .voice-bar:nth-child(3) {
+  animation-delay: 0.16s;
+}
+
+.voice-indicator-bar.voice-active .voice-bar:nth-child(4) {
+  animation-delay: 0.24s;
+}
+
+.voice-indicator-bar.voice-active .voice-bar:nth-child(5) {
+  animation-delay: 0.32s;
 }
 
 @keyframes voice-bars-active {
@@ -680,10 +698,10 @@ button.danger,
     transform: scaleY(0.55);
   }
   35% {
-    transform: scaleY(1.6);
+    transform: scaleY(1.4);
   }
   65% {
-    transform: scaleY(2.05);
+    transform: scaleY(1.95);
   }
 }
 
@@ -975,18 +993,18 @@ button:disabled {
   cursor: not-allowed;
 }
 
-button.voice-active {
+button[data-action].voice-active {
   transform: translateY(1px) scale(0.985);
   box-shadow: 0 0 0 3px rgba(10, 91, 216, 0.35), inset 0 0 0 2px rgba(255, 255, 255, 0.35);
   border: 2px solid var(--accent);
   filter: saturate(1.2);
 }
 
-button.primary.voice-active {
+button.primary[data-action].voice-active {
   background: #0849ad;
 }
 
-button:not(.primary).voice-active {
+button[data-action]:not(.primary).voice-active {
   background: #d8e7ff;
 }
 
