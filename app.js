@@ -38,14 +38,39 @@ Chili flakes (optional)
 Parsley (optional)
 
 Instructions:
-1. Bring a large pot of salted water to a boil.
-2. Cook the spaghetti according to package instructions.
+1. Bring a large pot of salted water to a boil and wait 5 seconds.
+2. Cook the spaghetti for 10 seconds.
 3. Meanwhile, heat olive oil in a pan over medium heat.
-4. Add sliced garlic and cook until lightly golden.
+4. Add sliced garlic and cook for 10 seconds until lightly golden.
 5. Add chili flakes if desired.
 6. Drain the pasta and add it to the pan.
-7. Toss well and cook for 1-2 minutes.
+7. Toss well and cook for 10 seconds.
 8. Serve with parsley.`;
+const timerDoneAudio = typeof Audio !== "undefined" ? new Audio("assets/timer-done.wav") : null;
+
+if (timerDoneAudio) {
+  timerDoneAudio.preload = "auto";
+}
+
+function playTimerDoneFeedback() {
+  if (timerDoneAudio) {
+    try {
+      timerDoneAudio.currentTime = 0;
+      const playback = timerDoneAudio.play();
+      if (playback && typeof playback.catch === "function") {
+        playback.catch((error) => {
+          console.warn("Timer completion sound could not play:", error);
+        });
+      }
+    } catch (error) {
+      console.warn("Timer completion sound failed:", error);
+    }
+  }
+
+  if (navigator.vibrate) {
+    navigator.vibrate(200);
+  }
+}
 
 function setTimerStatus(nextStatus, reason) {
   if (appState.timerStatus !== nextStatus) {
@@ -1373,7 +1398,15 @@ function startStepTimerIfNeeded(step) {
       if (timerDisplay) {
         timerDisplay.textContent = "00:00";
       }
+      playTimerDoneFeedback();
       speak("Timer finished.");
+
+      if (appState.currentScreen === "cooking") {
+        renderCooking();
+      }
+      if (appState.currentScreen === "timerActive") {
+        renderTimerActive();
+      }
     }
   );
 }
@@ -1495,7 +1528,18 @@ function renderCooking() {
     timerDisplay.id = "timerDisplay";
     timerDisplay.textContent = formatTime(appState.activeTimerSeconds ?? step.timerSeconds);
 
-    timerCard.append(timerIcon, timerDisplay);
+    const timerText = document.createElement("div");
+    timerText.className = "timer-text";
+    timerText.appendChild(timerDisplay);
+
+    if (appState.timerStatus === "paused") {
+      const pausedLabel = document.createElement("p");
+      pausedLabel.className = "timer-substatus";
+      pausedLabel.textContent = "En pause";
+      timerText.appendChild(pausedLabel);
+    }
+
+    timerCard.append(timerIcon, timerText);
 
     content.appendChild(timerCard);
   }
@@ -1605,7 +1649,18 @@ function renderTimerActive() {
   timerDisplay.id = "timerDisplay";
   timerDisplay.textContent = formatTime(appState.activeTimerSeconds ?? step.timerSeconds);
 
-  timerCard.append(timerIcon, timerDisplay);
+  const timerText = document.createElement("div");
+  timerText.className = "timer-text";
+  timerText.appendChild(timerDisplay);
+
+  if (appState.timerStatus === "paused") {
+    const pausedLabel = document.createElement("p");
+    pausedLabel.className = "timer-substatus";
+    pausedLabel.textContent = "En pause";
+    timerText.appendChild(pausedLabel);
+  }
+
+  timerCard.append(timerIcon, timerText);
   content.appendChild(timerCard);
 
   content.appendChild(createFocusedStepTimeline(appState.recipe.cookingSteps, idx));

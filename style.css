@@ -433,6 +433,13 @@ button.danger,
   font-family: "Poppins", sans-serif;
 }
 
+.timer-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
 .timer-panel .timer-icon {
   font-size: 26px;
   position: relative;
@@ -445,12 +452,21 @@ button.danger,
   letter-spacing: 0.02em;
 }
 
+.timer-substatus {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.1;
+  font-weight: 500;
+  opacity: 0.78;
+}
+
 .timer-panel.timer-running {
   background: #101010;
 }
 
 .timer-panel.timer-running .timer-icon,
-.timer-panel.timer-running .timer-display {
+.timer-panel.timer-running .timer-display,
+.timer-panel.timer-running .timer-substatus {
   color: #ffffff;
 }
 
@@ -459,7 +475,8 @@ button.danger,
 }
 
 .timer-panel.timer-paused .timer-icon,
-.timer-panel.timer-paused .timer-display {
+.timer-panel.timer-paused .timer-display,
+.timer-panel.timer-paused .timer-substatus {
   color: #6a717d;
 }
 
