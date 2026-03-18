@@ -7,6 +7,8 @@ function speak(text) {
     return;
   }
 
+  window.dispatchEvent(new CustomEvent("kitchenpilot:voice-speech-end"));
+
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.rate = 1;
   utterance.pitch = 1;

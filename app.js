@@ -226,6 +226,19 @@ function setVoiceRecognitionActivity(isActive) {
   setVoiceUserSpeaking(isActive);
 }
 
+function clearVoiceRecognitionActivity() {
+  if (appState.voiceUserSpeakingTimeoutId) {
+    window.clearTimeout(appState.voiceUserSpeakingTimeoutId);
+    appState.voiceUserSpeakingTimeoutId = null;
+  }
+  setVoiceUserSpeaking(false);
+}
+
+function resetVoiceActivityState() {
+  clearVoiceRecognitionActivity();
+  setVoiceOutputSpeaking(false);
+}
+
 function pulseVoiceRecognitionActivity(durationMs = 700) {
   setVoiceUserSpeaking(true);
 
@@ -355,6 +368,7 @@ function formatTime(totalSeconds) {
 function setScreen(screenName) {
   const previousScreen = appState.currentScreen;
   appState.currentScreen = screenName;
+  resetVoiceActivityState();
 
   if (previousScreen === "preparation" && screenName !== "preparation") {
     appState.lastSpokenPreparationIndex = null;
@@ -389,12 +403,19 @@ function setScreen(screenName) {
       renderIngredients();
       break;
     case "preparationIntro":
+      appState.preparationIndex = 0;
+      appState.lastSpokenPreparationIndex = null;
       renderPreparationIntro();
       break;
     case "preparation":
       renderPreparation();
       break;
     case "cookingIntro":
+      appState.cookingIndex = 0;
+      appState.lastSpokenCookingIndex = null;
+      appState.activeTimerSeconds = null;
+      appState.timerPaused = false;
+      appState.timerSkippedStepIndex = null;
       renderCookingIntro();
       break;
     case "cooking":
@@ -587,6 +608,21 @@ function getCurrentPreparationText() {
   return appState.recipe.preparationSteps[appState.preparationIndex] || "";
 }
 
+function resetPreparationFlowState() {
+  appState.preparationIndex = 0;
+  appState.lastSpokenPreparationIndex = null;
+}
+
+function openPreparationIntro() {
+  resetPreparationFlowState();
+  setScreen("preparationIntro");
+}
+
+function startPreparationFlow() {
+  resetPreparationFlowState();
+  setScreen("preparation");
+}
+
 function advancePreparationStep() {
   if (!appState.recipe) {
     return;
@@ -759,7 +795,7 @@ function handleVoiceCommand(commandText) {
   if (appState.currentScreen === "preparationIntro") {
     if (command.includes("next") || command.includes("continue") || command.includes("start")) {
       runVoiceAction("next", "Continue", () => {
-        setScreen("preparation");
+        startPreparationFlow();
       });
       return;
     }
@@ -827,7 +863,7 @@ function handleVoiceCommand(commandText) {
   if (command.includes("previous") || command.includes("back")) {
     if (appState.currentScreen === "cookingIntro") {
       runVoiceAction("back", "Back", () => {
-        setScreen("preparationIntro");
+        openPreparationIntro();
       });
       return;
     }
@@ -984,20 +1020,12 @@ function startVoiceCommands() {
     };
 
     voiceRecognition.onspeechend = () => {
-      if (appState.voiceUserSpeakingTimeoutId) {
-        window.clearTimeout(appState.voiceUserSpeakingTimeoutId);
-        appState.voiceUserSpeakingTimeoutId = null;
-      }
-      setVoiceRecognitionActivity(false);
+      clearVoiceRecognitionActivity();
     };
 
     voiceRecognition.onend = () => {
       appState.voiceListening = false;
-      if (appState.voiceUserSpeakingTimeoutId) {
-        window.clearTimeout(appState.voiceUserSpeakingTimeoutId);
-        appState.voiceUserSpeakingTimeoutId = null;
-      }
-      appState.voiceUserSpeaking = false;
+      clearVoiceRecognitionActivity();
       if (appState.voiceEnabled && isGuidanceScreen(appState.currentScreen)) {
         setVoiceCommandStatus("Listening...", 0);
         try {
@@ -1014,12 +1042,7 @@ function startVoiceCommands() {
     voiceRecognition.onerror = (event) => {
       appState.voiceEnabled = false;
       appState.voiceListening = false;
-      if (appState.voiceUserSpeakingTimeoutId) {
-        window.clearTimeout(appState.voiceUserSpeakingTimeoutId);
-        appState.voiceUserSpeakingTimeoutId = null;
-      }
-      appState.voiceUserSpeaking = false;
-      appState.voiceOutputSpeaking = false;
+      resetVoiceActivityState();
       appState.voiceExecuting = false;
       const code = event && event.error ? String(event.error) : "";
       if (code === "not-allowed" || code === "service-not-allowed") {
@@ -1041,12 +1064,7 @@ function startVoiceCommands() {
   }
 
   appState.voiceListening = false;
-  if (appState.voiceUserSpeakingTimeoutId) {
-    window.clearTimeout(appState.voiceUserSpeakingTimeoutId);
-    appState.voiceUserSpeakingTimeoutId = null;
-  }
-  appState.voiceUserSpeaking = false;
-  appState.voiceOutputSpeaking = false;
+  resetVoiceActivityState();
   appState.voiceExecuting = false;
   setVoiceCommandStatus("Listening...", 0);
   try {
@@ -1062,12 +1080,7 @@ function startVoiceCommands() {
 function stopVoiceCommands() {
   appState.voiceEnabled = false;
   appState.voiceListening = false;
-  if (appState.voiceUserSpeakingTimeoutId) {
-    window.clearTimeout(appState.voiceUserSpeakingTimeoutId);
-    appState.voiceUserSpeakingTimeoutId = null;
-  }
-  appState.voiceUserSpeaking = false;
-  appState.voiceOutputSpeaking = false;
+  resetVoiceActivityState();
   appState.voiceErrorMessage = "";
   appState.voiceExecuting = false;
   appState.voiceHeard = "";
@@ -1680,7 +1693,7 @@ function renderPreparationIntro() {
   actions.append(
     createButton("Home", "secondary-action", () => setScreen("home"), "home"),
     createButton("Back", "secondary-action", () => setScreen("ingredients"), "back"),
-    createButton("Continue", "primary primary-action", () => setScreen("preparation"), "next")
+    createButton("Continue", "primary primary-action", () => startPreparationFlow(), "next")
   );
 
   screen.appendChild(actions);
@@ -1712,7 +1725,7 @@ function renderCookingIntro() {
   actions.className = "stage-actions";
   actions.append(
     createButton("Home", "secondary-action", () => setScreen("home"), "home"),
-    createButton("Back", "secondary-action", () => setScreen("preparationIntro"), "back"),
+    createButton("Back", "secondary-action", () => openPreparationIntro(), "back"),
     createButton("Start Cooking", "primary primary-action", () => setScreen("cooking"), "next")
   );
 
@@ -1832,17 +1845,12 @@ function renderPreparation() {
         appState.preparationIndex -= 1;
         renderPreparation();
       } else {
-        setScreen("preparationIntro");
+        openPreparationIntro();
       }
     }, "back"),
     createButton("Repeat", "", () => speak(currentText), "repeat"),
     createButton("Next", "primary", () => {
-      if (appState.preparationIndex < total - 1) {
-        appState.preparationIndex += 1;
-        renderPreparation();
-      } else {
-        setScreen("cookingIntro");
-      }
+      advancePreparationStep();
     }, "next")
   );
 
