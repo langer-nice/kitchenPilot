@@ -213,13 +213,23 @@ function isVoiceUiActive() {
   return Boolean(appState.voiceUserSpeaking || appState.voiceOutputSpeaking);
 }
 
+function syncVoiceIndicatorBars() {
+  const stateClass = !appState.voiceEnabled ? "voice-off" : isVoiceUiActive() ? "voice-active" : "voice-idle";
+  const indicators = document.querySelectorAll(".voice-indicator-bar");
+
+  indicators.forEach((indicator) => {
+    indicator.classList.remove("voice-off", "voice-idle", "voice-active");
+    indicator.classList.add(stateClass);
+  });
+}
+
 function setVoiceUserSpeaking(isSpeaking) {
   const nextValue = Boolean(isSpeaking);
   if (appState.voiceUserSpeaking === nextValue) {
     return;
   }
   appState.voiceUserSpeaking = nextValue;
-  renderCurrentVoiceScreen();
+  syncVoiceIndicatorBars();
 }
 
 function setVoiceRecognitionActivity(isActive) {
@@ -258,7 +268,7 @@ function setVoiceOutputSpeaking(isSpeaking) {
     return;
   }
   appState.voiceOutputSpeaking = nextValue;
-  renderCurrentVoiceScreen();
+  syncVoiceIndicatorBars();
 }
 
 function appendVoiceCommandStatus(screen) {
@@ -1832,8 +1842,8 @@ function renderPreparation() {
   content.appendChild(card);
 
   if (appState.lastSpokenPreparationIndex !== idx) {
-    speak(currentText);
     appState.lastSpokenPreparationIndex = idx;
+    speak(currentText);
   }
 
   const actions = document.createElement("div");
