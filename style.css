@@ -69,6 +69,10 @@ body {
   margin: 0 auto;
 }
 
+.app:has(.page-shell) {
+  padding: 0;
+}
+
 .screen {
   display: flex;
   flex-direction: column;
@@ -76,8 +80,8 @@ body {
 }
 
 .page-shell {
-  min-height: calc(100dvh - (var(--space-3) * 2));
-  height: calc(100dvh - (var(--space-3) * 2));
+  min-height: 100dvh;
+  height: 100dvh;
   gap: 0;
 }
 
@@ -86,6 +90,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+  padding: var(--space-3) var(--space-3) 0;
 }
 
 .page-content {
@@ -95,7 +100,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding-top: var(--space-3);
+  padding: var(--space-3) var(--space-3) 128px;
   padding-bottom: 128px;
   scrollbar-gutter: stable;
 }
@@ -514,8 +519,10 @@ button.danger,
 .cooking-top {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 4px;
   padding: 2px 2px 4px;
+  text-align: center;
 }
 
 .recipe-name {
@@ -523,9 +530,9 @@ button.danger,
   font-size: 0.8rem;
   line-height: 1.2;
   color: var(--color-text-muted);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  overflow: hidden;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .header-row {
@@ -542,7 +549,7 @@ button.danger,
 
 .step-indicator {
   margin: 0;
-  text-align: left;
+  text-align: center;
   font-size: 1.02rem;
   font-weight: 700;
   font-family: "Poppins", sans-serif;
@@ -882,8 +889,7 @@ button:not(.primary).voice-active {
   bottom: 0;
   z-index: 5;
   margin-top: auto;
-  margin-left: calc(var(--space-3) * -1);
-  margin-right: calc(var(--space-3) * -1);
+  width: 100%;
   background: var(--surface);
   border-top: 1px solid var(--border);
   padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
