@@ -86,21 +86,27 @@ function playTimerDoneFeedback() {
     navigator.vibrate(200);
   }
 
+  const playTimerDoneSound = () => {
+    if (!timerDoneAudio) {
+      return;
+    }
+    try {
+      timerDoneAudio.currentTime = 0;
+      const playback = timerDoneAudio.play();
+      if (playback && typeof playback.catch === "function") {
+        playback.catch((error) => {
+          console.warn("Timer completion sound could not play:", error);
+        });
+      }
+    } catch (error) {
+      console.warn("Timer completion sound failed:", error);
+    }
+  };
+
+  playTimerDoneSound();
+
   const canSpeak = "speechSynthesis" in window && typeof SpeechSynthesisUtterance !== "undefined";
   if (!canSpeak) {
-    if (timerDoneAudio) {
-      try {
-        timerDoneAudio.currentTime = 0;
-        const playback = timerDoneAudio.play();
-        if (playback && typeof playback.catch === "function") {
-          playback.catch((error) => {
-            console.warn("Timer completion sound could not play:", error);
-          });
-        }
-      } catch (error) {
-        console.warn("Timer completion sound failed:", error);
-      }
-    }
     return;
   }
 
@@ -110,43 +116,13 @@ function playTimerDoneFeedback() {
       utterance.rate = 1;
       utterance.pitch = 1;
       utterance.lang = "en-US";
-      utterance.onerror = () => {
-        if (!timerDoneAudio) {
-          return;
-        }
-        try {
-          timerDoneAudio.currentTime = 0;
-          const playback = timerDoneAudio.play();
-          if (playback && typeof playback.catch === "function") {
-            playback.catch((error) => {
-              console.warn("Timer completion sound could not play:", error);
-            });
-          }
-        } catch (error) {
-          console.warn("Timer completion sound failed:", error);
-        }
-      };
 
       window.speechSynthesis.cancel();
       window.speechSynthesis.speak(utterance);
     } catch (error) {
       console.warn("Timer completion speech failed:", error);
-      if (!timerDoneAudio) {
-        return;
-      }
-      try {
-        timerDoneAudio.currentTime = 0;
-        const playback = timerDoneAudio.play();
-        if (playback && typeof playback.catch === "function") {
-          playback.catch((playError) => {
-            console.warn("Timer completion sound could not play:", playError);
-          });
-        }
-      } catch (playError) {
-        console.warn("Timer completion sound failed:", playError);
-      }
     }
-  }, 200);
+  }, 250);
 }
 
 function setTimerStatus(nextStatus, reason) {
@@ -874,6 +850,114 @@ function setVoiceHint(message, timeoutMs = 2500) {
   }, timeoutMs);
 }
 
+function createVoiceIndicatorBar(targetScreen) {
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.className = "voice-indicator-bar";
+  if (appState.voiceEnabled) {
+    trigger.classList.add("voice-enabled");
+  }
+  if (appState.voiceListening || appState.voiceExecuting) {
+    trigger.classList.add("voice-active");
+  }
+  trigger.setAttribute("aria-label", "Open voice settings");
+
+  const bars = document.createElement("div");
+  bars.className = "voice-bars";
+
+  for (let i = 0; i < 5; i += 1) {
+    const bar = document.createElement("span");
+    bar.className = "voice-bar";
+    bars.appendChild(bar);
+  }
+
+  trigger.appendChild(bars);
+  trigger.addEventListener("click", () => {
+    openVoiceSettingsModal(targetScreen);
+  });
+
+  return trigger;
+}
+
+function openVoiceSettingsModal(targetScreen) {
+  const overlay = document.createElement("div");
+  overlay.className = "voice-modal-overlay";
+
+  const modal = document.createElement("div");
+  modal.className = "voice-modal";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+  modal.setAttribute("aria-label", "Voice settings");
+
+  const title = document.createElement("h2");
+  title.textContent = "Voice Settings";
+
+  const status = document.createElement("p");
+  status.className = "voice-modal-copy";
+  if (appState.voiceListening) {
+    status.textContent = "Voice is listening.";
+  } else if (appState.voiceEnabled) {
+    status.textContent = "Voice commands are enabled.";
+  } else {
+    status.textContent = "Voice commands are disabled.";
+  }
+
+  const toggleBtn = createButton(
+    appState.voiceEnabled ? "Turn Voice Off" : "Turn Voice On",
+    "primary",
+    () => {
+      overlay.remove();
+      setVoiceEnabled(!appState.voiceEnabled, {
+        hintMessage: !appState.voiceEnabled
+          ? "Voice commands enabled. Say: Next, Repeat, Pause."
+          : "Voice commands disabled.",
+        hintMs: 2200
+      });
+
+      if (targetScreen === "cooking") {
+        renderCooking();
+      }
+      if (targetScreen === "timerActive") {
+        renderTimerActive();
+      }
+    }
+  );
+
+  const closeBtn = createButton("Close", "", () => {
+    overlay.remove();
+    if (targetScreen === "cooking") {
+      renderCooking();
+    }
+    if (targetScreen === "timerActive") {
+      renderTimerActive();
+    }
+  });
+
+  const actions = document.createElement("div");
+  actions.className = "button-row";
+  actions.append(toggleBtn, closeBtn);
+
+  modal.append(title, status);
+
+  if (appState.voiceErrorMessage) {
+    const error = document.createElement("p");
+    error.className = "voice-error";
+    error.textContent = appState.voiceErrorMessage;
+    modal.appendChild(error);
+  }
+
+  modal.appendChild(actions);
+  overlay.appendChild(modal);
+
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) {
+      overlay.remove();
+    }
+  });
+
+  document.body.appendChild(overlay);
+}
+
 function createButton(label, className, onClick, actionName) {
   const btn = document.createElement("button");
   btn.textContent = label;
@@ -1539,46 +1623,7 @@ function renderCooking() {
   top.append(recipeName, stepMeta);
   header.appendChild(top);
 
-  const voiceRow = document.createElement("div");
-  voiceRow.className = "header-row row-2 voice-panel compact-voice";
-  if (appState.voiceEnabled) {
-    voiceRow.classList.add("voice-active");
-  }
-
-  const voiceLabel = document.createElement("p");
-  voiceLabel.className = "meta voice-label";
-  const voiceIcon = document.createElement("i");
-  voiceIcon.className = "fa-solid fa-microphone voice-icon";
-  voiceIcon.setAttribute("aria-hidden", "true");
-  const voiceText = document.createElement("span");
-  voiceText.textContent = appState.voiceListening ? "Voice listening" : "Voice";
-  voiceLabel.append(voiceIcon, voiceText);
-
-  const voiceSwitchLabel = document.createElement("label");
-  voiceSwitchLabel.className = "mic-switch";
-  if (appState.voiceListening) {
-    voiceSwitchLabel.classList.add("listening");
-  }
-  voiceSwitchLabel.setAttribute("aria-label", "Toggle voice commands");
-
-  const voiceToggleInput = document.createElement("input");
-  voiceToggleInput.type = "checkbox";
-  voiceToggleInput.checked = appState.voiceEnabled;
-  voiceToggleInput.disabled = !SpeechRecognition;
-  voiceToggleInput.addEventListener("click", (event) => {
-    event.preventDefault();
-    const nextEnabled = !appState.voiceEnabled;
-    setVoiceEnabled(nextEnabled, {
-      hintMessage: "Voice commands enabled. Say: Next, Repeat, Pause.",
-      hintMs: 2600
-    });
-  });
-
-  const slider = document.createElement("span");
-  slider.className = "slider";
-  voiceSwitchLabel.append(voiceToggleInput, slider);
-  voiceRow.append(voiceLabel, voiceSwitchLabel);
-  content.appendChild(voiceRow);
+  content.appendChild(createVoiceIndicatorBar("cooking"));
   appendVoiceCommandStatus(content);
   appendVoiceError(content);
 
@@ -1741,49 +1786,7 @@ function renderTimerActive() {
 
   content.appendChild(createFocusedStepTimeline(appState.recipe.cookingSteps, idx));
 
-  const voiceRow = document.createElement("div");
-  voiceRow.className = "header-row row-2 voice-panel compact-voice";
-  if (appState.voiceEnabled) {
-    voiceRow.classList.add("voice-active");
-  }
-  const voiceLabel = document.createElement("p");
-  voiceLabel.className = "meta voice-label";
-
-  const voiceIcon = document.createElement("i");
-  voiceIcon.className = "fa-solid fa-microphone voice-icon";
-  voiceIcon.setAttribute("aria-hidden", "true");
-
-  const voiceText = document.createElement("span");
-  voiceText.textContent = appState.voiceListening ? "Voice listening" : "Voice";
-
-  voiceLabel.append(voiceIcon, voiceText);
-
-  const voiceSwitchLabel = document.createElement("label");
-  voiceSwitchLabel.className = "mic-switch";
-  if (appState.voiceListening) {
-    voiceSwitchLabel.classList.add("listening");
-  }
-  voiceSwitchLabel.setAttribute("aria-label", "Toggle voice commands");
-
-  const voiceToggleInput = document.createElement("input");
-  voiceToggleInput.type = "checkbox";
-  voiceToggleInput.checked = appState.voiceEnabled;
-  voiceToggleInput.disabled = !SpeechRecognition;
-  voiceToggleInput.addEventListener("click", (event) => {
-    event.preventDefault();
-    const nextEnabled = !appState.voiceEnabled;
-    setVoiceEnabled(nextEnabled, {
-      hintMessage: "Voice commands enabled. Say: Pause, Skip timer, Next.",
-      hintMs: 2600
-    });
-  });
-
-  const slider = document.createElement("span");
-  slider.className = "slider";
-
-  voiceSwitchLabel.append(voiceToggleInput, slider);
-  voiceRow.append(voiceLabel, voiceSwitchLabel);
-  content.appendChild(voiceRow);
+  content.appendChild(createVoiceIndicatorBar("timerActive"));
   appendVoiceCommandStatus(content);
   appendVoiceError(content);
 
