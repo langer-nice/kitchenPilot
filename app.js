@@ -26,7 +26,6 @@ const appState = {
   voiceIngredientHighlightIndex: null,
   voiceIngredientHighlightTimeoutId: null,
   timerSkippedStepIndex: null,
-  deferInitialPreparationSpeech: false,
   preparationSpeechFrameId: null
 };
 
@@ -640,8 +639,21 @@ function openPreparationIntro() {
 
 function startPreparationFlow() {
   resetPreparationFlowState();
-  appState.deferInitialPreparationSpeech = true;
+  const initialPreparationText = appState.recipe?.preparationSteps?.[0] || "";
+  appState.lastSpokenPreparationIndex = 0;
   setScreen("preparation");
+
+  if (!initialPreparationText) {
+    return;
+  }
+
+  appState.preparationSpeechFrameId = window.requestAnimationFrame(() => {
+    appState.preparationSpeechFrameId = null;
+    if (appState.currentScreen !== "preparation" || appState.preparationIndex !== 0) {
+      return;
+    }
+    speak(initialPreparationText);
+  });
 }
 
 function advancePreparationStep() {
@@ -1854,19 +1866,7 @@ function renderPreparation() {
 
   if (appState.lastSpokenPreparationIndex !== idx) {
     appState.lastSpokenPreparationIndex = idx;
-    if (appState.deferInitialPreparationSpeech && idx === 0) {
-      appState.deferInitialPreparationSpeech = false;
-      appState.preparationSpeechFrameId = window.requestAnimationFrame(() => {
-        appState.preparationSpeechFrameId = null;
-        if (appState.currentScreen !== "preparation" || appState.preparationIndex !== idx) {
-          return;
-        }
-        speak(currentText);
-      });
-    } else {
-      appState.deferInitialPreparationSpeech = false;
-      speak(currentText);
-    }
+    speak(currentText);
   }
 
   const actions = document.createElement("div");
