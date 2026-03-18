@@ -91,6 +91,7 @@ body {
   flex-direction: column;
   gap: var(--space-1);
   padding: var(--space-3) var(--space-3) 0;
+  text-align: center;
 }
 
 .page-content {

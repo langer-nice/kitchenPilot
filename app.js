@@ -82,23 +82,71 @@ if (timerDoneAudio) {
 }
 
 function playTimerDoneFeedback() {
-  if (timerDoneAudio) {
-    try {
-      timerDoneAudio.currentTime = 0;
-      const playback = timerDoneAudio.play();
-      if (playback && typeof playback.catch === "function") {
-        playback.catch((error) => {
-          console.warn("Timer completion sound could not play:", error);
-        });
-      }
-    } catch (error) {
-      console.warn("Timer completion sound failed:", error);
-    }
-  }
-
   if (navigator.vibrate) {
     navigator.vibrate(200);
   }
+
+  const canSpeak = "speechSynthesis" in window && typeof SpeechSynthesisUtterance !== "undefined";
+  if (!canSpeak) {
+    if (timerDoneAudio) {
+      try {
+        timerDoneAudio.currentTime = 0;
+        const playback = timerDoneAudio.play();
+        if (playback && typeof playback.catch === "function") {
+          playback.catch((error) => {
+            console.warn("Timer completion sound could not play:", error);
+          });
+        }
+      } catch (error) {
+        console.warn("Timer completion sound failed:", error);
+      }
+    }
+    return;
+  }
+
+  window.setTimeout(() => {
+    try {
+      const utterance = new SpeechSynthesisUtterance("Timer finished");
+      utterance.rate = 1;
+      utterance.pitch = 1;
+      utterance.lang = "en-US";
+      utterance.onerror = () => {
+        if (!timerDoneAudio) {
+          return;
+        }
+        try {
+          timerDoneAudio.currentTime = 0;
+          const playback = timerDoneAudio.play();
+          if (playback && typeof playback.catch === "function") {
+            playback.catch((error) => {
+              console.warn("Timer completion sound could not play:", error);
+            });
+          }
+        } catch (error) {
+          console.warn("Timer completion sound failed:", error);
+        }
+      };
+
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
+    } catch (error) {
+      console.warn("Timer completion speech failed:", error);
+      if (!timerDoneAudio) {
+        return;
+      }
+      try {
+        timerDoneAudio.currentTime = 0;
+        const playback = timerDoneAudio.play();
+        if (playback && typeof playback.catch === "function") {
+          playback.catch((playError) => {
+            console.warn("Timer completion sound could not play:", playError);
+          });
+        }
+      } catch (playError) {
+        console.warn("Timer completion sound failed:", playError);
+      }
+    }
+  }, 200);
 }
 
 function setTimerStatus(nextStatus, reason) {
@@ -1428,7 +1476,6 @@ function startStepTimerIfNeeded(step) {
         timerDisplay.textContent = "00:00";
       }
       playTimerDoneFeedback();
-      speak("Timer finished.");
 
       if (appState.currentScreen === "cooking") {
         renderCooking();
