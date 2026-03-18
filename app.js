@@ -73,6 +73,8 @@ Instructions:
 8. Serve with parsley.`;
 
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
+// "(DEV)" means the example recipe uses short timers for faster testing.
+const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
 const timerDoneAudio = typeof Audio !== "undefined" ? new Audio("assets/timer-done.wav") : null;
 
 if (timerDoneAudio) {
@@ -1039,7 +1041,7 @@ function renderHome() {
     clearValidation();
   });
 
-  const loadExampleTextBtn = createButton("Load example text", "", () => {
+  const loadExampleTextBtn = createButton(EXAMPLE_RECIPE_BUTTON_LABEL, "", () => {
     isTextInputVisible = true;
     syncTextInputVisibility();
     textInput.value = EXAMPLE_RECIPE_TEXT;
