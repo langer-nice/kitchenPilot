@@ -209,6 +209,10 @@ function setVoiceUserSpeaking(isSpeaking) {
   renderCurrentVoiceScreen();
 }
 
+function setVoiceRecognitionActivity(isActive) {
+  setVoiceUserSpeaking(isActive);
+}
+
 function setVoiceOutputSpeaking(isSpeaking) {
   const nextValue = Boolean(isSpeaking);
   if (appState.voiceOutputSpeaking === nextValue) {
@@ -753,15 +757,37 @@ function startVoiceCommands() {
       renderCurrentVoiceScreen();
     };
 
+    voiceRecognition.onaudiostart = () => {
+      if (!appState.voiceEnabled) {
+        return;
+      }
+      setVoiceRecognitionActivity(true);
+    };
+
+    voiceRecognition.onaudioend = () => {
+      setVoiceRecognitionActivity(false);
+    };
+
+    voiceRecognition.onsoundstart = () => {
+      if (!appState.voiceEnabled) {
+        return;
+      }
+      setVoiceRecognitionActivity(true);
+    };
+
+    voiceRecognition.onsoundend = () => {
+      setVoiceRecognitionActivity(false);
+    };
+
     voiceRecognition.onspeechstart = () => {
       if (!appState.voiceEnabled) {
         return;
       }
-      setVoiceUserSpeaking(true);
+      setVoiceRecognitionActivity(true);
     };
 
     voiceRecognition.onspeechend = () => {
-      setVoiceUserSpeaking(false);
+      setVoiceRecognitionActivity(false);
     };
 
     voiceRecognition.onend = () => {
