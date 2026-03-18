@@ -22,6 +22,8 @@ const appState = {
   voiceHintMessage: "",
   voiceHintTimeoutId: null,
   voiceUserSpeakingTimeoutId: null,
+  voiceIngredientHighlightIndex: null,
+  voiceIngredientHighlightTimeoutId: null,
   timerSkippedStepIndex: null
 };
 
@@ -296,6 +298,39 @@ function flashActionButton(actionName) {
   window.setTimeout(() => {
     target.classList.remove("voice-active");
   }, 560);
+}
+
+function clearVoiceIngredientHighlight() {
+  if (appState.voiceIngredientHighlightTimeoutId) {
+    window.clearTimeout(appState.voiceIngredientHighlightTimeoutId);
+    appState.voiceIngredientHighlightTimeoutId = null;
+  }
+  appState.voiceIngredientHighlightIndex = null;
+}
+
+function highlightVoiceIngredient(index, durationMs = 260) {
+  clearVoiceIngredientHighlight();
+  appState.voiceIngredientHighlightIndex = index;
+  renderIngredients();
+  appState.voiceIngredientHighlightTimeoutId = window.setTimeout(() => {
+    appState.voiceIngredientHighlightIndex = null;
+    appState.voiceIngredientHighlightTimeoutId = null;
+    if (appState.currentScreen === "ingredients") {
+      renderIngredients();
+    }
+  }, durationMs);
+}
+
+function runVoiceAction(actionName, commandLabel, action, delayMs = 110) {
+  if (actionName) {
+    flashActionButton(actionName);
+  }
+  if (commandLabel) {
+    markVoiceCommandExecuted(commandLabel);
+  }
+  window.setTimeout(() => {
+    action();
+  }, delayMs);
 }
 
 function isGuidanceScreen(screenName) {
@@ -705,14 +740,16 @@ function handleVoiceCommand(commandText) {
 
   if (appState.currentScreen === "ingredientsIntro") {
     if (command.includes("next") || command.includes("continue") || command.includes("start")) {
-      markVoiceCommandExecuted("Continue");
-      setScreen("ingredients");
+      runVoiceAction("next", "Continue", () => {
+        setScreen("ingredients");
+      });
       return;
     }
 
     if (command.includes("back")) {
-      markVoiceCommandExecuted("Back");
-      setScreen("analysis");
+      runVoiceAction("back", "Back", () => {
+        setScreen("analysis");
+      });
       return;
     }
   }
@@ -720,21 +757,27 @@ function handleVoiceCommand(commandText) {
   if (appState.currentScreen === "ingredients") {
     const ingredientIndex = findIngredientIndexFromVoice(command);
     if (ingredientIndex >= 0) {
-      setIngredientChecked(ingredientIndex, true);
+      highlightVoiceIngredient(ingredientIndex);
       markVoiceCommandExecuted("Check Ingredient");
-      renderIngredients();
+      window.setTimeout(() => {
+        setIngredientChecked(ingredientIndex, true);
+        clearVoiceIngredientHighlight();
+        renderIngredients();
+      }, 140);
       return;
     }
 
     if (command.includes("next") || command.includes("ready") || command.includes("continue")) {
-      markVoiceCommandExecuted("Ready");
-      setScreen("preparationIntro");
+      runVoiceAction("next", "Ready", () => {
+        setScreen("preparationIntro");
+      });
       return;
     }
 
     if (command.includes("back")) {
-      markVoiceCommandExecuted("Back");
-      setScreen("ingredientsIntro");
+      runVoiceAction("back", "Back", () => {
+        setScreen("ingredientsIntro");
+      });
       return;
     }
 
@@ -743,9 +786,9 @@ function handleVoiceCommand(commandText) {
 
   if (command.includes("next")) {
     if (appState.currentScreen === "preparation") {
-      flashActionButton("next");
-      markVoiceCommandExecuted("Next");
-      advancePreparationStep();
+      runVoiceAction("next", "Next", () => {
+        advancePreparationStep();
+      });
       return;
     }
 
@@ -757,61 +800,61 @@ function handleVoiceCommand(commandText) {
       return;
     }
 
-    flashActionButton("next");
-    markVoiceCommandExecuted("Next");
-    goToNextCookingStep();
+    runVoiceAction("next", "Next", () => {
+      goToNextCookingStep();
+    });
     return;
   }
 
   if (command.includes("previous") || command.includes("back")) {
     if (appState.currentScreen === "cookingIntro") {
-      flashActionButton("back");
-      markVoiceCommandExecuted("Back");
-      setScreen("preparationIntro");
+      runVoiceAction("back", "Back", () => {
+        setScreen("preparationIntro");
+      });
       return;
     }
 
     if (appState.currentScreen === "preparation") {
-      flashActionButton("back");
-      markVoiceCommandExecuted("Back");
-      goBackPreparationStep();
+      runVoiceAction("back", "Back", () => {
+        goBackPreparationStep();
+      });
       return;
     }
 
-    flashActionButton("back");
-    markVoiceCommandExecuted("Back");
-    goToPreviousCookingStep();
+    runVoiceAction("back", "Back", () => {
+      goToPreviousCookingStep();
+    });
     return;
   }
 
   if (command.includes("repeat")) {
     if (appState.currentScreen === "preparation") {
-      flashActionButton("repeat");
-      markVoiceCommandExecuted("Repeat");
-      const prepText = getCurrentPreparationText();
-      if (prepText) {
-        speak(prepText);
-      }
+      runVoiceAction("repeat", "Repeat", () => {
+        const prepText = getCurrentPreparationText();
+        if (prepText) {
+          speak(prepText);
+        }
+      });
       return;
     }
 
-    flashActionButton("repeat");
-    markVoiceCommandExecuted("Repeat");
-    repeatCurrentCookingStep();
+    runVoiceAction("repeat", "Repeat", () => {
+      repeatCurrentCookingStep();
+    });
     return;
   }
 
   if (command.includes("pause")) {
-    flashActionButton("pause");
-    markVoiceCommandExecuted("Pause");
-    toggleGuidancePause();
+    runVoiceAction("pause", "Pause", () => {
+      toggleGuidancePause();
+    });
     return;
   }
 
   if (appState.currentScreen === "cookingIntro" && command.includes("start") && command.includes("cook")) {
-    flashActionButton("next");
-    markVoiceCommandExecuted("Start Cooking");
-    setScreen("cooking");
+    runVoiceAction("next", "Start Cooking", () => {
+      setScreen("cooking");
+    });
     return;
   }
 
@@ -842,16 +885,16 @@ function handleVoiceCommand(commandText) {
   }
 
   if (command.includes("stop")) {
-    flashActionButton("stop");
-    markVoiceCommandExecuted("Stop");
-    stopCookingFlow();
+    runVoiceAction("stop", "Stop", () => {
+      stopCookingFlow();
+    });
     return;
   }
 
   if (command.includes("skip") && command.includes("timer")) {
-    flashActionButton("skip-timer");
-    markVoiceCommandExecuted("Skip Timer");
-    skipTimerAndAdvance();
+    runVoiceAction("skip-timer", "Skip Timer", () => {
+      skipTimerAndAdvance();
+    });
     return;
   }
 
@@ -1637,6 +1680,9 @@ function renderIngredients() {
   appState.recipe.ingredients.forEach((ingredient, index) => {
     const li = document.createElement("li");
     li.className = "ingredient-item";
+    if (appState.voiceIngredientHighlightIndex === index) {
+      li.classList.add("voice-matched");
+    }
 
     const label = document.createElement("label");
     label.className = "ingredient-option";

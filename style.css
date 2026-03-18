@@ -270,6 +270,12 @@ button.danger,
   background: #f1f4f8;
 }
 
+.ingredient-item.voice-matched {
+  border-color: #8fd0ab;
+  background: #eefaf3;
+  box-shadow: 0 0 0 2px rgba(47, 191, 113, 0.12);
+}
+
 .ingredient-option {
   min-height: 56px;
   padding: 14px 16px;
