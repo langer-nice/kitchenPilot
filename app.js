@@ -21,6 +21,7 @@ const appState = {
   lastSpokenCookingIndex: null,
   voiceHintMessage: "",
   voiceHintTimeoutId: null,
+  voiceUserSpeakingTimeoutId: null,
   timerSkippedStepIndex: null
 };
 
@@ -203,7 +204,7 @@ function markVoiceCommandExecuted(commandLabel) {
 }
 
 function isVoiceUiActive() {
-  return Boolean(appState.voiceUserSpeaking || appState.voiceOutputSpeaking || appState.voiceExecuting);
+  return Boolean(appState.voiceUserSpeaking || appState.voiceOutputSpeaking);
 }
 
 function setVoiceUserSpeaking(isSpeaking) {
@@ -217,6 +218,21 @@ function setVoiceUserSpeaking(isSpeaking) {
 
 function setVoiceRecognitionActivity(isActive) {
   setVoiceUserSpeaking(isActive);
+}
+
+function pulseVoiceRecognitionActivity(durationMs = 700) {
+  setVoiceUserSpeaking(true);
+
+  if (appState.voiceUserSpeakingTimeoutId) {
+    window.clearTimeout(appState.voiceUserSpeakingTimeoutId);
+  }
+
+  appState.voiceUserSpeakingTimeoutId = window.setTimeout(() => {
+    appState.voiceUserSpeakingTimeoutId = null;
+    if (!appState.voiceListening) {
+      setVoiceUserSpeaking(false);
+    }
+  }, durationMs);
 }
 
 function setVoiceOutputSpeaking(isSpeaking) {
@@ -439,19 +455,28 @@ function getIngredientVoiceTokens(ingredient) {
     .filter((token) => token.length > 2 && !stopWords.has(token) && !/^\d+$/.test(token));
 }
 
+function getIngredientVoiceKey(ingredient) {
+  const tokens = getIngredientVoiceTokens(ingredient);
+  if (tokens.length === 0) {
+    return "";
+  }
+
+  return tokens[tokens.length - 1];
+}
+
 function findIngredientIndexFromVoice(commandText) {
   if (!appState.recipe || !Array.isArray(appState.recipe.ingredients)) {
     return -1;
   }
 
   const normalizedCommand = normalizeVoiceMatchText(commandText);
-  if (!normalizedCommand.includes("check")) {
+  if (!normalizedCommand) {
     return -1;
   }
 
   return appState.recipe.ingredients.findIndex((ingredient) => {
-    const normalizedIngredient = normalizeVoiceMatchText(ingredient);
-    if (normalizedIngredient && normalizedCommand.includes(normalizedIngredient)) {
+    const ingredientKey = getIngredientVoiceKey(ingredient);
+    if (ingredientKey && normalizedCommand.includes(ingredientKey)) {
       return true;
     }
 
@@ -870,7 +895,7 @@ function startVoiceCommands() {
       }
 
       appState.voiceHeard = transcript;
-      appState.voiceUserSpeaking = false;
+      pulseVoiceRecognitionActivity();
       const heardLabel = transcript.length > 26 ? `${transcript.slice(0, 26)}...` : transcript;
       setVoiceCommandStatus(`Heard: ${heardLabel}`, 1000);
       renderCurrentVoiceScreen();
@@ -890,28 +915,6 @@ function startVoiceCommands() {
       renderCurrentVoiceScreen();
     };
 
-    voiceRecognition.onaudiostart = () => {
-      if (!appState.voiceEnabled) {
-        return;
-      }
-      setVoiceRecognitionActivity(true);
-    };
-
-    voiceRecognition.onaudioend = () => {
-      setVoiceRecognitionActivity(false);
-    };
-
-    voiceRecognition.onsoundstart = () => {
-      if (!appState.voiceEnabled) {
-        return;
-      }
-      setVoiceRecognitionActivity(true);
-    };
-
-    voiceRecognition.onsoundend = () => {
-      setVoiceRecognitionActivity(false);
-    };
-
     voiceRecognition.onspeechstart = () => {
       if (!appState.voiceEnabled) {
         return;
@@ -920,11 +923,19 @@ function startVoiceCommands() {
     };
 
     voiceRecognition.onspeechend = () => {
+      if (appState.voiceUserSpeakingTimeoutId) {
+        window.clearTimeout(appState.voiceUserSpeakingTimeoutId);
+        appState.voiceUserSpeakingTimeoutId = null;
+      }
       setVoiceRecognitionActivity(false);
     };
 
     voiceRecognition.onend = () => {
       appState.voiceListening = false;
+      if (appState.voiceUserSpeakingTimeoutId) {
+        window.clearTimeout(appState.voiceUserSpeakingTimeoutId);
+        appState.voiceUserSpeakingTimeoutId = null;
+      }
       appState.voiceUserSpeaking = false;
       if (appState.voiceEnabled && isGuidanceScreen(appState.currentScreen)) {
         setVoiceCommandStatus("Listening...", 0);
@@ -942,6 +953,10 @@ function startVoiceCommands() {
     voiceRecognition.onerror = (event) => {
       appState.voiceEnabled = false;
       appState.voiceListening = false;
+      if (appState.voiceUserSpeakingTimeoutId) {
+        window.clearTimeout(appState.voiceUserSpeakingTimeoutId);
+        appState.voiceUserSpeakingTimeoutId = null;
+      }
       appState.voiceUserSpeaking = false;
       appState.voiceOutputSpeaking = false;
       appState.voiceExecuting = false;
@@ -965,6 +980,10 @@ function startVoiceCommands() {
   }
 
   appState.voiceListening = false;
+  if (appState.voiceUserSpeakingTimeoutId) {
+    window.clearTimeout(appState.voiceUserSpeakingTimeoutId);
+    appState.voiceUserSpeakingTimeoutId = null;
+  }
   appState.voiceUserSpeaking = false;
   appState.voiceOutputSpeaking = false;
   appState.voiceExecuting = false;
@@ -982,6 +1001,10 @@ function startVoiceCommands() {
 function stopVoiceCommands() {
   appState.voiceEnabled = false;
   appState.voiceListening = false;
+  if (appState.voiceUserSpeakingTimeoutId) {
+    window.clearTimeout(appState.voiceUserSpeakingTimeoutId);
+    appState.voiceUserSpeakingTimeoutId = null;
+  }
   appState.voiceUserSpeaking = false;
   appState.voiceOutputSpeaking = false;
   appState.voiceErrorMessage = "";
