@@ -7,6 +7,10 @@ function speak(text) {
     return;
   }
 
+  if (typeof window.kitchenPilotCanSpeak === "function" && !window.kitchenPilotCanSpeak()) {
+    return;
+  }
+
   window.dispatchEvent(new CustomEvent("kitchenpilot:voice-speech-end"));
 
   const utterance = new SpeechSynthesisUtterance(text);

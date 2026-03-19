@@ -10,6 +10,7 @@ const appState = {
   activeTimerSeconds: null,
   timerPaused: false,
   voiceEnabled: false,
+  voiceUnlocked: false,
   voiceListening: false,
   voiceUserSpeaking: false,
   voiceOutputSpeaking: false,
@@ -82,7 +83,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v27";
+const BUILD_VERSION = "DEV BUILD: v28";
 const timerDoneAudio = typeof Audio !== "undefined" ? new Audio("assets/timer-done.wav") : null;
 
 if (timerDoneAudio) {
@@ -114,7 +115,7 @@ function playTimerDoneFeedback() {
   playTimerDoneSound();
 
   const canSpeak = "speechSynthesis" in window && typeof SpeechSynthesisUtterance !== "undefined";
-  if (!canSpeak) {
+  if (!canSpeak || !window.kitchenPilotCanSpeak?.()) {
     return;
   }
 
@@ -612,6 +613,117 @@ function createVoiceActivationCard(enableMessage) {
   voiceCard.append(voiceTitle, row);
   appendVoiceError(voiceCard);
   return voiceCard;
+}
+
+function createCompactVoiceStrip(options = {}) {
+  const {
+    hintMessage = "Voice commands enabled. Say: Next, Repeat, Pause.",
+    hintMs = 2200,
+    showListeningText = false,
+    animateListening = false,
+    showUnlockButton = false,
+    unlockLabel = "Unlock Voice",
+    readyLabel = "Voice ready"
+  } = options;
+
+  const voiceRow = document.createElement("div");
+  voiceRow.className = "header-row row-2 voice-panel compact-voice";
+  if (appState.voiceEnabled) {
+    voiceRow.classList.add("voice-active");
+  }
+  if (!animateListening) {
+    voiceRow.classList.add("voice-panel--static");
+  }
+
+  const voiceLabel = document.createElement("p");
+  voiceLabel.className = "meta voice-label";
+
+  const voiceIcon = document.createElement("i");
+  voiceIcon.className = "fa-solid fa-microphone voice-icon";
+  voiceIcon.setAttribute("aria-hidden", "true");
+
+  const voiceText = document.createElement("span");
+  voiceText.textContent = showListeningText && appState.voiceListening ? "Voice listening" : "Voice";
+  voiceLabel.append(voiceIcon, voiceText);
+
+  const voiceSwitchLabel = document.createElement("label");
+  voiceSwitchLabel.className = "mic-switch";
+  if (animateListening && appState.voiceListening) {
+    voiceSwitchLabel.classList.add("listening");
+  }
+  voiceSwitchLabel.setAttribute("aria-label", "Toggle voice commands");
+
+  const voiceToggleInput = document.createElement("input");
+  voiceToggleInput.type = "checkbox";
+  voiceToggleInput.checked = appState.voiceEnabled;
+  voiceToggleInput.disabled = !SpeechRecognition;
+  voiceToggleInput.addEventListener("click", (event) => {
+    event.preventDefault();
+    const nextEnabled = !appState.voiceEnabled;
+    setVoiceEnabled(nextEnabled, {
+      hintMessage,
+      hintMs
+    });
+  });
+
+  const slider = document.createElement("span");
+  slider.className = "slider";
+  voiceSwitchLabel.append(voiceToggleInput, slider);
+
+  const controls = document.createElement("div");
+  controls.className = "voice-strip-controls";
+  controls.appendChild(voiceSwitchLabel);
+
+  if (showUnlockButton && !appState.voiceUnlocked) {
+    const unlockBtn = createButton(unlockLabel, "inline-btn voice-unlock-btn", () => {
+      unlockVoiceAssistant({
+        statusMessage: readyLabel,
+        enableHintMessage: hintMessage,
+        enableHintMs: hintMs
+      });
+    });
+    controls.appendChild(unlockBtn);
+  } else if (showUnlockButton && appState.voiceUnlocked) {
+    const readyState = document.createElement("span");
+    readyState.className = "voice-ready-badge";
+    readyState.textContent = readyLabel;
+    controls.appendChild(readyState);
+  }
+
+  voiceRow.append(voiceLabel, controls);
+
+  return voiceRow;
+}
+
+function unlockVoiceAssistant(options = {}) {
+  const {
+    statusMessage = "Voice ready",
+    enableHintMessage = "",
+    enableHintMs = 2200
+  } = options;
+
+  const canSpeak = "speechSynthesis" in window && typeof SpeechSynthesisUtterance !== "undefined";
+  appState.voiceUnlocked = true;
+  appState.voiceEnabled = true;
+  appState.voiceErrorMessage = "";
+
+  if (canSpeak) {
+    try {
+      const utterance = new SpeechSynthesisUtterance(statusMessage);
+      utterance.rate = 1;
+      utterance.pitch = 1;
+      utterance.lang = "en-US";
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
+    } catch (error) {
+      console.warn("Voice unlock speech failed:", error);
+    }
+  }
+
+  setVoiceEnabled(true, {
+    hintMessage: enableHintMessage,
+    hintMs: enableHintMs
+  });
 }
 
 function getCurrentCookingStep() {
@@ -1151,6 +1263,10 @@ function setVoiceEnabled(nextEnabled, options = {}) {
   renderCurrentVoiceScreen();
 }
 
+window.kitchenPilotCanSpeak = function kitchenPilotCanSpeak() {
+  return Boolean(appState.voiceEnabled && appState.voiceUnlocked);
+};
+
 function setVoiceHint(message, timeoutMs = 2500) {
   appState.voiceHintMessage = message;
 
@@ -1688,7 +1804,16 @@ function renderIngredientsIntro() {
   description.textContent = "Confirm that all ingredients are ready before you start.";
 
   screen.append(title, stageLabel, recipeIcon, description);
-  screen.appendChild(createVoiceActivationCard("Voice enabled. You can say: Check garlic, check onions."));
+  screen.appendChild(createCompactVoiceStrip({
+    hintMessage: "Voice enabled. You can say: Check garlic, check onions.",
+    hintMs: 2200,
+    showListeningText: false,
+    animateListening: false,
+    showUnlockButton: true,
+    unlockLabel: "Unlock Voice",
+    readyLabel: "Voice ready"
+  }));
+  appendVoiceError(screen);
 
   const actions = document.createElement("div");
   actions.className = "stage-actions";

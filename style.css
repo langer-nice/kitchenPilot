@@ -586,6 +586,10 @@ button.danger,
   box-shadow: 0 0 0 2px rgba(47, 107, 255, 0.12);
 }
 
+.voice-panel--static.voice-active .voice-icon {
+  animation: none;
+}
+
 .voice-indicator-bar {
   width: 100%;
   min-height: 48px;
@@ -722,6 +726,12 @@ button.danger,
   align-items: center;
   gap: 8px;
   font-size: 0.9rem;
+}
+
+.voice-strip-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .voice-icon {
@@ -930,6 +940,27 @@ button.inline-btn {
   font-size: 0.9rem;
   border: 1px solid var(--border);
   background: #e9ecf2;
+}
+
+button.voice-unlock-btn {
+  min-width: auto;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.voice-ready-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(47, 107, 255, 0.1);
+  color: var(--color-primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .mic-switch {
