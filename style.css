@@ -86,6 +86,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+  align-items: center;
+  text-align: center;
 }
 
 .page-content {
@@ -498,6 +500,7 @@ button.danger,
   flex-direction: column;
   gap: 2px;
   padding: 2px 2px 4px;
+  align-items: center;
 }
 
 .recipe-name {
@@ -508,6 +511,7 @@ button.danger,
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
+  text-align: center;
 }
 
 .header-row {
@@ -524,7 +528,7 @@ button.danger,
 
 .step-indicator {
   margin: 0;
-  text-align: left;
+  text-align: center;
   font-size: 1.02rem;
   font-weight: 700;
   font-family: "Poppins", sans-serif;
@@ -569,6 +573,10 @@ button.danger,
 .voice-panel.voice-active .voice-icon {
   color: var(--color-primary);
   animation: mic-icon-pulse 1.4s ease-in-out infinite;
+}
+
+.voice-panel--static.voice-active .voice-icon {
+  animation: none;
 }
 
 .voice-hint {
