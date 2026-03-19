@@ -83,6 +83,7 @@ body {
   min-height: 100dvh;
   height: 100dvh;
   gap: 0;
+  overflow: hidden;
 }
 
 .page-header {
@@ -101,14 +102,13 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-3) 128px;
-  padding-bottom: 128px;
+  padding: var(--space-3);
   scrollbar-gutter: stable;
 }
 
 .page-shell--guided .page-content {
   padding-top: 12px;
-  padding-bottom: 148px;
+  padding-bottom: 12px;
 }
 
 h1 {
@@ -387,13 +387,15 @@ button.danger,
 .step-list-panel {
   display: flex;
   flex-direction: column;
+  width: 100%;
 }
 
 .step-timeline {
   list-style: none;
   margin: 0;
   padding: 0;
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -1192,6 +1194,7 @@ button[data-action]:not(.primary).voice-active {
   bottom: 0;
   z-index: 5;
   margin-top: auto;
+  flex-shrink: 0;
   width: 100%;
   background: var(--surface);
   border-top: 1px solid var(--border);
