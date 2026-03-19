@@ -83,7 +83,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v28";
+const BUILD_VERSION = "DEV BUILD: v29";
 const timerDoneAudio = typeof Audio !== "undefined" ? new Audio("assets/timer-done.wav") : null;
 
 if (timerDoneAudio) {
@@ -1568,6 +1568,9 @@ function createTitledPage(title, subtitle, screenClassName = "") {
 function renderHome() {
   const screen = clearAndSetScreenTitle("KitchenPilot", "Hands-free cooking guide");
   let isTextInputVisible = false;
+  let isAnalyzing = false;
+  let currentAnalysisController = null;
+  let loadingOverlay = null;
 
   const card = createCard();
   const urlLabel = document.createElement("label");
@@ -1640,7 +1643,60 @@ function renderHome() {
   const actions = document.createElement("div");
   actions.className = "button-row";
 
+  function hideLoadingOverlay() {
+    if (loadingOverlay) {
+      loadingOverlay.remove();
+      loadingOverlay = null;
+    }
+  }
+
+  function resetAnalysisUi() {
+    isAnalyzing = false;
+    currentAnalysisController = null;
+    startBtn.disabled = false;
+    startBtn.textContent = "Start Cooking";
+    hideLoadingOverlay();
+  }
+
+  function showLoadingOverlay() {
+    hideLoadingOverlay();
+
+    loadingOverlay = document.createElement("div");
+    loadingOverlay.className = "loading-overlay";
+
+    const panel = document.createElement("div");
+    panel.className = "loading-overlay-card";
+
+    const spinner = document.createElement("div");
+    spinner.className = "loading-spinner";
+    spinner.setAttribute("aria-hidden", "true");
+
+    const title = document.createElement("p");
+    title.className = "loading-title";
+    title.textContent = "Analyse de la recette...";
+
+    const subtitle = document.createElement("p");
+    subtitle.className = "loading-subtitle";
+    subtitle.textContent = "Cela peut prendre quelques secondes.";
+
+    const cancelBtn = createButton("Annuler", "", () => {
+      if (currentAnalysisController) {
+        currentAnalysisController.abort();
+      }
+      resetAnalysisUi();
+    });
+    cancelBtn.classList.add("loading-cancel-btn");
+
+    panel.append(spinner, title, subtitle, cancelBtn);
+    loadingOverlay.appendChild(panel);
+    screen.appendChild(loadingOverlay);
+  }
+
   const startBtn = createButton("Start Cooking", "primary", async () => {
+    if (isAnalyzing) {
+      return;
+    }
+
     const recipeUrl = urlInput.value.trim();
     const recipeText = textInput.value.trim();
     const parseInput = recipeText || recipeUrl;
@@ -1654,11 +1710,16 @@ function renderHome() {
     validation.hidden = true;
     validation.textContent = "";
 
+    isAnalyzing = true;
     startBtn.disabled = true;
     startBtn.textContent = "Analysing...";
+    currentAnalysisController = typeof AbortController !== "undefined" ? new AbortController() : null;
+    showLoadingOverlay();
 
     try {
-      const parsedRecipe = await parseRecipeText(parseInput);
+      const parsedRecipe = await parseRecipeText(parseInput, {
+        signal: currentAnalysisController ? currentAnalysisController.signal : undefined
+      });
       const recipe = normalizeRecipeForGuidance(parsedRecipe);
 
       appState.recipe = recipe;
@@ -1666,13 +1727,18 @@ function renderHome() {
       appState.preparationIndex = 0;
       appState.cookingIndex = 0;
       appState.timerSkippedStepIndex = null;
+      resetAnalysisUi();
       setScreen("analysis");
     } catch (error) {
+      if (error && error.name === "AbortError") {
+        return;
+      }
+
       console.error("Recipe parsing failed:", error);
       const message = error && error.message ? error.message : "Could not parse recipe. Please try again.";
-      alert(message);
-      startBtn.disabled = false;
-      startBtn.textContent = "Start Cooking";
+      validation.textContent = message;
+      validation.hidden = false;
+      resetAnalysisUi();
     }
   });
 

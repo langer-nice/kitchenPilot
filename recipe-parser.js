@@ -1,4 +1,5 @@
-async function parseRecipeText(recipeText) {
+async function parseRecipeText(recipeText, options = {}) {
+  const { signal } = options;
   try {
     const isLiveServerLocal =
       (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") &&
@@ -12,6 +13,7 @@ async function parseRecipeText(recipeText) {
         "Content-Type": "application/json",
         "Accept": "application/json"
       },
+      signal,
       body: JSON.stringify({
         recipeText: recipeText
       })
