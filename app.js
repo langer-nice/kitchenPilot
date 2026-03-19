@@ -64,18 +64,16 @@ function clearTimerMessageLater() {
 function setVoiceCommandStatus(message, timeoutMs = 1200) {
   appState.voiceCommandStatus = message || "";
 
-  if (appState.voiceCommandStatusTimeoutId) {
-    window.clearTimeout(appState.voiceCommandStatusTimeoutId);
-    appState.voiceCommandStatusTimeoutId = null;
-  }
-
-  if (!timeoutMs) {
-    return;
-  }
-
-  appState.voiceCommandStatusTimeoutId = window.setTimeout(() => {
-    appState.voiceCommandStatus = appState.voiceListening ? "Listening..." : "";
-    appState.voiceCommandStatusTimeoutId = null;
+  function rerenderVoiceAwareScreen() {
+    if (appState.currentScreen === "ingredientsIntro") {
+      renderIngredientsIntro();
+    }
+    if (appState.currentScreen === "ingredients") {
+      renderIngredients();
+    }
+    if (appState.currentScreen === "preparationIntro") {
+      renderPreparationIntro();
+    }
     if (appState.currentScreen === "preparation") {
       renderPreparation();
     }
@@ -88,6 +86,21 @@ function setVoiceCommandStatus(message, timeoutMs = 1200) {
     if (appState.currentScreen === "cookingIntro") {
       renderCookingIntro();
     }
+  }
+
+  if (appState.voiceCommandStatusTimeoutId) {
+    window.clearTimeout(appState.voiceCommandStatusTimeoutId);
+    appState.voiceCommandStatusTimeoutId = null;
+  }
+
+  if (!timeoutMs) {
+    return;
+  }
+
+  appState.voiceCommandStatusTimeoutId = window.setTimeout(() => {
+    appState.voiceCommandStatus = appState.voiceListening ? "Listening..." : "";
+    appState.voiceCommandStatusTimeoutId = null;
+    rerenderVoiceAwareScreen();
   }, timeoutMs);
 }
 
@@ -96,6 +109,15 @@ function renderCurrentVoiceScreen() {
     window.setVoiceMicPulse(appState.voiceListening);
   }
 
+  if (appState.currentScreen === "ingredientsIntro") {
+    renderIngredientsIntro();
+  }
+  if (appState.currentScreen === "ingredients") {
+    renderIngredients();
+  }
+  if (appState.currentScreen === "preparationIntro") {
+    renderPreparationIntro();
+  }
   if (appState.currentScreen === "preparation") {
     renderPreparation();
   }
@@ -171,7 +193,13 @@ function flashActionButton(actionName) {
 }
 
 function isGuidanceScreen(screenName) {
-  return screenName === "cooking" || screenName === "timerActive" || screenName === "cookingIntro";
+  return screenName === "ingredientsIntro" ||
+    screenName === "ingredients" ||
+    screenName === "preparationIntro" ||
+    screenName === "preparation" ||
+    screenName === "cooking" ||
+    screenName === "timerActive" ||
+    screenName === "cookingIntro";
 }
 
 function formatTime(totalSeconds) {
@@ -206,29 +234,13 @@ function setScreen(screenName) {
       renderAnalysis();
       break;
     case "ingredientsIntro":
-      renderStageIntro(
-        "Ingredient Check",
-        "Confirm that all ingredients are ready before you start.",
-        "analysis",
-        "ingredients",
-        "Continue",
-        "",
-        "STAGE 1"
-      );
+      renderIngredientsIntro();
       break;
     case "ingredients":
       renderIngredients();
       break;
     case "preparationIntro":
-      renderStageIntro(
-        "Preparation",
-        "Complete quick prep tasks before active cooking starts.",
-        "ingredients",
-        "preparation",
-        "Continue",
-        "",
-        "STAGE 2"
-      );
+      renderPreparationIntro();
       break;
     case "preparation":
       renderPreparation();
@@ -1200,32 +1212,13 @@ function renderStageIntro(title, description, backScreen, continueScreen, contin
   appEl.appendChild(screen);
 }
 
-function renderCookingIntro() {
-  appEl.innerHTML = "";
-  const screen = document.createElement("div");
-  screen.className = "screen stage-screen";
-
-  const title = document.createElement("h1");
-  title.className = "stage-title";
-  title.textContent = "Cooking Mode";
-
-  const stageLabel = document.createElement("p");
-  stageLabel.className = "stage-label";
-  stageLabel.textContent = "STAGE 3";
-
-  const recipeIcon = document.createElement("div");
-  recipeIcon.className = "recipe-icon";
-  recipeIcon.setAttribute("aria-hidden", "true");
-  recipeIcon.innerHTML = '<i class="fa-solid fa-pizza-slice"></i>';
-
-  screen.append(title, stageLabel, recipeIcon);
-
+function createIntroVoiceCard(titleText = "Enable voice commands for hands-free cooking") {
   const voiceCard = createCard();
   voiceCard.classList.add("voice-card");
 
   const voiceTitle = document.createElement("p");
   voiceTitle.className = "voice-card-text";
-  voiceTitle.textContent = "Enable voice commands for hands-free cooking";
+  voiceTitle.textContent = titleText;
 
   const row = document.createElement("div");
   row.className = "voice-row";
@@ -1264,7 +1257,79 @@ function renderCookingIntro() {
   voiceCard.append(voiceTitle, row);
   appendVoiceCommandStatus(voiceCard);
   appendVoiceError(voiceCard);
-  screen.appendChild(voiceCard);
+
+  return voiceCard;
+}
+
+function renderIngredientsIntro() {
+  appEl.innerHTML = "";
+  const screen = document.createElement("div");
+  screen.className = "screen stage-screen";
+
+  const title = document.createElement("h1");
+  title.className = "stage-title";
+  title.textContent = "Ingredient Check";
+
+  const stageLabel = document.createElement("p");
+  stageLabel.className = "stage-label";
+  stageLabel.textContent = "STAGE 1";
+
+  const recipeIcon = document.createElement("div");
+  recipeIcon.className = "recipe-icon";
+  recipeIcon.setAttribute("aria-hidden", "true");
+  recipeIcon.innerHTML = '<i class="fa-solid fa-pizza-slice"></i>';
+
+  const description = document.createElement("p");
+  description.className = "stage-description";
+  description.textContent = "Confirm that all ingredients are ready before you start.";
+
+  screen.append(title, stageLabel, recipeIcon, description);
+  screen.appendChild(createIntroVoiceCard());
+
+  const actions = document.createElement("div");
+  actions.className = "stage-actions";
+  actions.append(
+    createButton("Home", "secondary-action", () => setScreen("home"), "home"),
+    createButton("Back", "secondary-action", () => setScreen("analysis"), "back"),
+    createButton("Continue", "primary primary-action", () => setScreen("ingredients"), "next")
+  );
+
+  screen.appendChild(actions);
+  appEl.appendChild(screen);
+}
+
+function renderPreparationIntro() {
+  renderStageIntro(
+    "Preparation",
+    "Complete quick prep tasks before active cooking starts.",
+    "ingredients",
+    "preparation",
+    "Continue",
+    "",
+    "STAGE 2"
+  );
+}
+
+function renderCookingIntro() {
+  appEl.innerHTML = "";
+  const screen = document.createElement("div");
+  screen.className = "screen stage-screen";
+
+  const title = document.createElement("h1");
+  title.className = "stage-title";
+  title.textContent = "Cooking Mode";
+
+  const stageLabel = document.createElement("p");
+  stageLabel.className = "stage-label";
+  stageLabel.textContent = "STAGE 3";
+
+  const recipeIcon = document.createElement("div");
+  recipeIcon.className = "recipe-icon";
+  recipeIcon.setAttribute("aria-hidden", "true");
+  recipeIcon.innerHTML = '<i class="fa-solid fa-pizza-slice"></i>';
+
+  screen.append(title, stageLabel, recipeIcon);
+  screen.appendChild(createIntroVoiceCard());
 
   const actions = document.createElement("div");
   actions.className = "stage-actions";
@@ -1289,6 +1354,49 @@ function renderIngredients() {
   }
 
   const { content, footer } = createTitledPage("Ingredient Check", "Verify ingredients before you begin");
+
+  const voiceRow = document.createElement("div");
+  voiceRow.className = "header-row row-2 voice-panel compact-voice";
+  if (appState.voiceEnabled) {
+    voiceRow.classList.add("voice-active");
+  }
+
+  const voiceLabel = document.createElement("p");
+  voiceLabel.className = "meta voice-label";
+  const voiceIcon = document.createElement("i");
+  voiceIcon.className = "fa-solid fa-microphone voice-icon";
+  voiceIcon.setAttribute("aria-hidden", "true");
+  const voiceText = document.createElement("span");
+  voiceText.textContent = appState.voiceListening ? "Voice listening" : "Voice";
+  voiceLabel.append(voiceIcon, voiceText);
+
+  const voiceSwitchLabel = document.createElement("label");
+  voiceSwitchLabel.className = "mic-switch";
+  if (appState.voiceListening) {
+    voiceSwitchLabel.classList.add("listening");
+  }
+  voiceSwitchLabel.setAttribute("aria-label", "Toggle voice commands");
+
+  const voiceToggleInput = document.createElement("input");
+  voiceToggleInput.type = "checkbox";
+  voiceToggleInput.checked = appState.voiceEnabled;
+  voiceToggleInput.disabled = !SpeechRecognition;
+  voiceToggleInput.addEventListener("click", (event) => {
+    event.preventDefault();
+    const nextEnabled = !appState.voiceEnabled;
+    setVoiceEnabled(nextEnabled, {
+      hintMessage: "Voice commands enabled. Say: Next, Repeat, Pause.",
+      hintMs: 2200
+    });
+  });
+
+  const slider = document.createElement("span");
+  slider.className = "slider";
+  voiceSwitchLabel.append(voiceToggleInput, slider);
+  voiceRow.append(voiceLabel, voiceSwitchLabel);
+  content.appendChild(voiceRow);
+  appendVoiceCommandStatus(content);
+  appendVoiceError(content);
 
   const card = createCard();
   const list = document.createElement("ul");
