@@ -83,7 +83,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v38"; 
+const BUILD_VERSION = "DEV BUILD: v39"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const timerDoneAudio = typeof Audio !== "undefined" ? new Audio("assets/timer-done.wav") : null;
 const VOICE_ONBOARDING_STORAGE_KEY = "voiceOnboardingSeen";
@@ -1712,31 +1712,6 @@ function renderHome() {
   let loadingOverlay = null;
   const devModeEnabled = getDevModeEnabled();
 
-  const devModeRow = document.createElement("div");
-  devModeRow.className = "dev-mode-row";
-
-  const devModeLabel = document.createElement("p");
-  devModeLabel.className = "small dev-mode-label";
-  devModeLabel.textContent = "Dev Mode";
-
-  const devModeSwitch = document.createElement("label");
-  devModeSwitch.className = "mic-switch";
-  devModeSwitch.setAttribute("aria-label", "Toggle Dev Mode");
-
-  const devModeInput = document.createElement("input");
-  devModeInput.type = "checkbox";
-  devModeInput.checked = devModeEnabled;
-  devModeInput.addEventListener("change", () => {
-    setDevModeEnabled(devModeInput.checked);
-    renderHome();
-  });
-
-  const devModeSlider = document.createElement("span");
-  devModeSlider.className = "slider";
-  devModeSwitch.append(devModeInput, devModeSlider);
-  devModeRow.append(devModeLabel, devModeSwitch);
-  screen.appendChild(devModeRow);
-
   const card = createCard();
   const urlLabel = document.createElement("label");
   urlLabel.textContent = "Recipe URL";
@@ -1933,6 +1908,31 @@ function renderHome() {
     devToolsCard.append(devToolsTitle, buildLabel, exampleActions, devActions);
     screen.appendChild(devToolsCard);
   }
+
+  const devModeRow = document.createElement("div");
+  devModeRow.className = "dev-mode-row";
+
+  const devModeLabel = document.createElement("p");
+  devModeLabel.className = "small dev-mode-label";
+  devModeLabel.textContent = "Dev Mode";
+
+  const devModeSwitch = document.createElement("label");
+  devModeSwitch.className = "mic-switch";
+  devModeSwitch.setAttribute("aria-label", "Toggle Dev Mode");
+
+  const devModeInput = document.createElement("input");
+  devModeInput.type = "checkbox";
+  devModeInput.checked = devModeEnabled;
+  devModeInput.addEventListener("change", () => {
+    setDevModeEnabled(devModeInput.checked);
+    renderHome();
+  });
+
+  const devModeSlider = document.createElement("span");
+  devModeSlider.className = "slider";
+  devModeSwitch.append(devModeInput, devModeSlider);
+  devModeRow.append(devModeLabel, devModeSwitch);
+  screen.appendChild(devModeRow);
 
   const clearValidation = () => {
     if (validation.hidden) {
