@@ -87,8 +87,10 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v40"; 
+const BUILD_VERSION = "DEV BUILD: v44"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
+const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
+const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
 const timerDoneAudio = typeof Audio !== "undefined" ? new Audio("assets/timer-done.wav") : null;
 const VOICE_ONBOARDING_STORAGE_KEY = "voiceOnboardingSeen";
 
@@ -1708,12 +1710,31 @@ function createTitledPage(title, subtitle, screenClassName = "") {
   return shell;
 }
 
+function createRecipeIcon(assetPath, label = "") {
+  const recipeIcon = document.createElement("div");
+  recipeIcon.className = "recipe-icon";
+  recipeIcon.setAttribute("aria-hidden", "true");
+
+  const image = document.createElement("img");
+  image.src = assetPath;
+  image.alt = label;
+  image.loading = "eager";
+  image.decoding = "async";
+
+  recipeIcon.appendChild(image);
+  return recipeIcon;
+}
+
 function renderHome() {
   const screen = clearAndSetScreenTitle("KitchenPilot", "Hands-free cooking guide");
+  screen.classList.add("home-screen");
   let isAnalyzing = false;
   let currentAnalysisController = null;
   let loadingOverlay = null;
   const devModeEnabled = getDevModeEnabled();
+
+  const homeMain = document.createElement("div");
+  homeMain.className = "home-main";
 
   const card = createCard();
   const urlLabel = document.createElement("label");
@@ -1759,7 +1780,7 @@ function renderHome() {
 
   textLabel.hidden = !appState.homeTextInputVisible;
   card.append(urlLabel, urlInput, textLabel, textInput, validation);
-  screen.appendChild(card);
+  homeMain.appendChild(card);
 
   const actions = document.createElement("div");
   actions.className = "button-row";
@@ -1869,8 +1890,7 @@ function renderHome() {
   });
 
   actions.append(startBtn);
-  screen.appendChild(actions);
-  screen.appendChild(textToggle);
+  homeMain.append(actions, textToggle);
 
   if (devModeEnabled) {
     const devToolsCard = createCard();
@@ -1921,8 +1941,10 @@ function renderHome() {
 
     devActions.append(devResetBtn, forceOnboardingBtn);
     devToolsCard.append(devToolsTitle, buildLabel, exampleActions, devActions);
-    screen.appendChild(devToolsCard);
+    homeMain.appendChild(devToolsCard);
   }
+
+  screen.appendChild(homeMain);
 
   const devModeRow = document.createElement("div");
   devModeRow.className = "dev-mode-row";
@@ -1977,7 +1999,7 @@ function renderAnalysis() {
     return;
   }
 
-  const { content, footer } = createTitledPage("Recipe Analysis", "Review parsed steps before cooking");
+  const { content, footer } = createTitledPage("Recipe Analysis", "Review parsed steps before cooking", "review-screen");
 
   const summaryCard = createCard();
   const recipeTitle = document.createElement("h2");
@@ -2016,6 +2038,15 @@ function renderStageIntro(title, description, backScreen, continueScreen, contin
   const screen = document.createElement("div");
   screen.className = "screen stage-screen";
 
+  const header = document.createElement("div");
+  header.className = "stage-screen__header";
+
+  const main = document.createElement("div");
+  main.className = "stage-screen__main";
+
+  const footer = document.createElement("div");
+  footer.className = "stage-screen__footer";
+
   const titleEl = document.createElement("h1");
   titleEl.className = "stage-title";
   titleEl.textContent = title;
@@ -2024,22 +2055,20 @@ function renderStageIntro(title, description, backScreen, continueScreen, contin
   stageLabel.className = "stage-label";
   stageLabel.textContent = stageLabelText || "";
 
-  const recipeIcon = document.createElement("div");
-  recipeIcon.className = "recipe-icon";
-  recipeIcon.setAttribute("aria-hidden", "true");
-  recipeIcon.innerHTML = '<i class="fa-solid fa-pizza-slice"></i>';
+  const recipeIcon = createRecipeIcon(INGREDIENT_STAGE_ICON, "");
 
   const descriptionEl = document.createElement("p");
   descriptionEl.className = "stage-description";
   descriptionEl.textContent = description;
 
-  screen.append(titleEl, stageLabel, recipeIcon, descriptionEl);
+  header.append(titleEl, stageLabel);
+  main.append(recipeIcon, descriptionEl);
 
   if (helperNote) {
     const note = document.createElement("p");
     note.className = "small stage-description";
     note.textContent = helperNote;
-    screen.appendChild(note);
+    main.appendChild(note);
   }
 
   const actions = document.createElement("div");
@@ -2050,7 +2079,8 @@ function renderStageIntro(title, description, backScreen, continueScreen, contin
     createButton(continueLabel || "Continue", "primary primary-action", () => setScreen(continueScreen), "next")
   );
 
-  screen.appendChild(actions);
+  footer.appendChild(actions);
+  screen.append(header, main, footer);
   appEl.appendChild(screen);
 }
 
@@ -2058,6 +2088,15 @@ function renderIngredientsIntro() {
   appEl.innerHTML = "";
   const screen = document.createElement("div");
   screen.className = "screen stage-screen";
+
+  const header = document.createElement("div");
+  header.className = "stage-screen__header";
+
+  const main = document.createElement("div");
+  main.className = "stage-screen__main";
+
+  const footer = document.createElement("div");
+  footer.className = "stage-screen__footer";
 
   const title = document.createElement("h1");
   title.className = "stage-title";
@@ -2067,17 +2106,15 @@ function renderIngredientsIntro() {
   stageLabel.className = "stage-label";
   stageLabel.textContent = "STAGE 1";
 
-  const recipeIcon = document.createElement("div");
-  recipeIcon.className = "recipe-icon";
-  recipeIcon.setAttribute("aria-hidden", "true");
-  recipeIcon.innerHTML = '<i class="fa-solid fa-pizza-slice"></i>';
+  const recipeIcon = createRecipeIcon(INGREDIENT_STAGE_ICON, "");
 
   const description = document.createElement("p");
   description.className = "stage-description";
   description.textContent = "Confirm that all ingredients are ready before you start.";
 
-  screen.append(title, stageLabel, recipeIcon, description);
-  screen.appendChild(createCompactVoiceStrip({
+  header.append(title, stageLabel);
+  main.append(recipeIcon, description);
+  main.appendChild(createCompactVoiceStrip({
     hintMessage: "Voice enabled. You can say: Check garlic, check onions.",
     hintMs: 2200,
     showListeningText: false,
@@ -2086,7 +2123,7 @@ function renderIngredientsIntro() {
     unlockLabel: "Unlock Voice",
     readyLabel: "Voice ready"
   }));
-  appendVoiceError(screen);
+  appendVoiceError(main);
 
   const actions = document.createElement("div");
   actions.className = "stage-actions";
@@ -2096,7 +2133,8 @@ function renderIngredientsIntro() {
     createButton("Continue", "primary primary-action", () => setScreen("ingredients"), "next")
   );
 
-  screen.appendChild(actions);
+  footer.appendChild(actions);
+  screen.append(header, main, footer);
   appEl.appendChild(screen);
 }
 
@@ -2104,6 +2142,15 @@ function renderPreparationIntro() {
   appEl.innerHTML = "";
   const screen = document.createElement("div");
   screen.className = "screen stage-screen";
+
+  const header = document.createElement("div");
+  header.className = "stage-screen__header";
+
+  const main = document.createElement("div");
+  main.className = "stage-screen__main";
+
+  const footer = document.createElement("div");
+  footer.className = "stage-screen__footer";
 
   const title = document.createElement("h1");
   title.className = "stage-title";
@@ -2113,17 +2160,15 @@ function renderPreparationIntro() {
   stageLabel.className = "stage-label";
   stageLabel.textContent = "STAGE 2";
 
-  const recipeIcon = document.createElement("div");
-  recipeIcon.className = "recipe-icon";
-  recipeIcon.setAttribute("aria-hidden", "true");
-  recipeIcon.innerHTML = '<i class="fa-solid fa-pizza-slice"></i>';
+  const recipeIcon = createRecipeIcon(INGREDIENT_STAGE_ICON, "");
 
   const description = document.createElement("p");
   description.className = "stage-description";
   description.textContent = "Complete quick prep tasks before active cooking starts.";
 
-  screen.append(title, stageLabel, recipeIcon, description);
-  screen.appendChild(createVoiceActivationCard("Voice enabled. You can say: Next, Repeat, Back."));
+  header.append(title, stageLabel);
+  main.append(recipeIcon, description);
+  main.appendChild(createVoiceActivationCard("Voice enabled. You can say: Next, Repeat, Back."));
 
   const actions = document.createElement("div");
   actions.className = "stage-actions";
@@ -2133,7 +2178,8 @@ function renderPreparationIntro() {
     createButton("Continue", "primary primary-action", () => startPreparationFlow(), "next")
   );
 
-  screen.appendChild(actions);
+  footer.appendChild(actions);
+  screen.append(header, main, footer);
   appEl.appendChild(screen);
 }
 
@@ -2141,6 +2187,15 @@ function renderCookingIntro() {
   appEl.innerHTML = "";
   const screen = document.createElement("div");
   screen.className = "screen stage-screen";
+
+  const header = document.createElement("div");
+  header.className = "stage-screen__header";
+
+  const main = document.createElement("div");
+  main.className = "stage-screen__main";
+
+  const footer = document.createElement("div");
+  footer.className = "stage-screen__footer";
 
   const title = document.createElement("h1");
   title.className = "stage-title";
@@ -2150,13 +2205,11 @@ function renderCookingIntro() {
   stageLabel.className = "stage-label";
   stageLabel.textContent = "STAGE 3";
 
-  const recipeIcon = document.createElement("div");
-  recipeIcon.className = "recipe-icon";
-  recipeIcon.setAttribute("aria-hidden", "true");
-  recipeIcon.innerHTML = '<i class="fa-solid fa-pizza-slice"></i>';
+  const recipeIcon = createRecipeIcon(COOKING_STAGE_ICON, "");
 
-  screen.append(title, stageLabel, recipeIcon);
-  screen.appendChild(createVoiceActivationCard("Voice enabled. You can say: Next, Repeat, Pause."));
+  header.append(title, stageLabel);
+  main.append(recipeIcon);
+  main.appendChild(createVoiceActivationCard("Voice enabled. You can say: Next, Repeat, Pause."));
 
   const actions = document.createElement("div");
   actions.className = "stage-actions";
@@ -2166,7 +2219,8 @@ function renderCookingIntro() {
     createButton("Start Cooking", "primary primary-action", () => setScreen("cooking"), "next")
   );
 
-  screen.appendChild(actions);
+  footer.appendChild(actions);
+  screen.append(header, main, footer);
   appEl.appendChild(screen);
 }
 
@@ -2611,17 +2665,38 @@ function renderTimerActive() {
 }
 
 function renderCompleted() {
-  const screen = clearAndSetScreenTitle("Recipe Completed", "Nice work in the kitchen");
+  appEl.innerHTML = "";
+  const screen = document.createElement("div");
+  screen.className = "screen stage-screen completed-screen";
 
-  const card = createCard();
+  const header = document.createElement("div");
+  header.className = "stage-screen__header";
+
+  const title = document.createElement("h1");
+  title.className = "stage-title";
+  title.textContent = "Recipe Completed";
+  header.appendChild(title);
+
+  const main = document.createElement("div");
+  main.className = "stage-screen__main completed-screen__main";
+
+  const recipeIcon = createRecipeIcon(COOKING_STAGE_ICON, "");
+
   const message = document.createElement("p");
-  message.className = "meta";
-  message.textContent = "Your dish is ready to serve.";
-  card.appendChild(message);
-  screen.appendChild(card);
+  message.className = "stage-description completed-message";
+  message.textContent = "Your dish is ready to serve";
+
+  const subtext = document.createElement("p");
+  subtext.className = "small completed-subtext";
+  subtext.textContent = "Nice work in the kitchen.";
+
+  main.append(recipeIcon, message, subtext);
+
+  const footer = document.createElement("div");
+  footer.className = "stage-screen__footer completed-screen__footer";
 
   const actions = document.createElement("div");
-  actions.className = "button-row";
+  actions.className = "button-row completed-actions";
   actions.append(
     createButton("Cook Again", "primary", () => {
       appState.preparationIndex = 0;
@@ -2633,12 +2708,14 @@ function renderCompleted() {
     createButton("Save Recipe", "", () => {
       alert("Save feature placeholder: recipe would be saved here.");
     }),
-    createButton("Return Home", "", () => {
+    createButton("Return Home", "ghost-action", () => {
       appState.recipe = null;
       setScreen("home");
     })
   );
-  screen.appendChild(actions);
+  footer.appendChild(actions);
+  screen.append(header, main, footer);
+  appEl.appendChild(screen);
 }
 
 window.addEventListener("keydown", (event) => {
