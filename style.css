@@ -1028,6 +1028,11 @@ button.inline-btn {
   background: #e9ecf2;
 }
 
+.homepage-reset-btn {
+  align-self: center;
+  margin-top: 4px;
+}
+
 button.voice-unlock-btn {
   min-width: auto;
   padding: 8px 12px;

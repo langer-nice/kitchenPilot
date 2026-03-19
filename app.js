@@ -83,7 +83,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v33"; 
+const BUILD_VERSION = "DEV BUILD: v34"; 
 const timerDoneAudio = typeof Audio !== "undefined" ? new Audio("assets/timer-done.wav") : null;
 const VOICE_ONBOARDING_STORAGE_KEY = "voiceOnboardingSeen";
 
@@ -743,6 +743,14 @@ function markVoiceOnboardingSeen() {
   }
 }
 
+function resetVoiceOnboardingSeen() {
+  try {
+    window.localStorage.removeItem(VOICE_ONBOARDING_STORAGE_KEY);
+  } catch {
+    // Ignore storage failures in private browsing or restricted environments.
+  }
+}
+
 function showVoiceOnboardingOverlay(onContinue) {
   if (document.querySelector(".voice-onboarding-overlay")) {
     return;
@@ -798,7 +806,9 @@ function showVoiceOnboardingOverlay(onContinue) {
   });
 
   const secondaryBtn = createButton("Not now", "", () => {
-    markVoiceOnboardingSeen();
+    if (checkbox.checked) {
+      markVoiceOnboardingSeen();
+    }
     overlay.remove();
     if (typeof onContinue === "function") {
       onContinue();
@@ -1843,6 +1853,12 @@ function renderHome() {
   actions.append(startBtn);
   screen.appendChild(actions);
   screen.appendChild(textToggle);
+
+  const devResetBtn = createButton("Reset Voice Onboarding", "inline-btn", () => {
+    resetVoiceOnboardingSeen();
+  });
+  devResetBtn.classList.add("homepage-reset-btn");
+  screen.appendChild(devResetBtn);
 
   const buildLabel = document.createElement("p");
   buildLabel.className = "small";
