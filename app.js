@@ -930,6 +930,8 @@ function createTitledPage(title, subtitle, screenClassName = "") {
 function renderHome() {
   const screen = clearAndSetScreenTitle("KitchenPilot", "Hands-free cooking guide");
   let isTextInputVisible = false;
+  let isAnalyzing = false;
+  let analysisAbortController = null;
 
   const card = createCard();
   const urlLabel = document.createElement("label");
@@ -1002,7 +1004,67 @@ function renderHome() {
   const actions = document.createElement("div");
   actions.className = "button-row";
 
+  function clearValidation() {
+    if (validation.hidden) {
+      return;
+    }
+    if (urlInput.value.trim() || textInput.value.trim()) {
+      validation.hidden = true;
+      validation.textContent = "";
+    }
+  }
+
+  function showAnalysisOverlay() {
+    const overlay = document.createElement("div");
+    overlay.className = "loading-overlay";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-live", "assertive");
+
+    const panel = document.createElement("div");
+    panel.className = "loading-overlay__panel";
+
+    const spinner = document.createElement("div");
+    spinner.className = "loading-overlay__spinner";
+    spinner.setAttribute("aria-hidden", "true");
+
+    const title = document.createElement("p");
+    title.className = "loading-overlay__title";
+    title.textContent = "Analyse de la recette...";
+
+    const subtitle = document.createElement("p");
+    subtitle.className = "loading-overlay__subtitle";
+    subtitle.textContent = "Cela peut prendre quelques secondes.";
+
+    const cancelBtn = createButton("Annuler", "", () => {
+      if (analysisAbortController) {
+        analysisAbortController.abort();
+      }
+      hideAnalysisOverlay();
+    });
+    cancelBtn.classList.add("loading-overlay__cancel");
+
+    panel.append(spinner, title, subtitle, cancelBtn);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+  }
+
+  function hideAnalysisOverlay() {
+    isAnalyzing = false;
+    analysisAbortController = null;
+    const overlay = document.querySelector(".loading-overlay");
+    if (overlay) {
+      overlay.remove();
+    }
+    startBtn.disabled = false;
+    startBtn.textContent = "Start Cooking";
+  }
+
   const startBtn = createButton("Start Cooking", "primary", async () => {
+    if (isAnalyzing) {
+      return;
+    }
+
     const recipeUrl = urlInput.value.trim();
     const recipeText = textInput.value.trim();
     const parseInput = recipeText || recipeUrl;
@@ -1016,13 +1078,19 @@ function renderHome() {
     validation.hidden = true;
     validation.textContent = "";
 
+    isAnalyzing = true;
+    analysisAbortController = new AbortController();
     startBtn.disabled = true;
     startBtn.textContent = "Analysing...";
+    showAnalysisOverlay();
 
     try {
-      const parsedRecipe = await parseRecipeText(parseInput);
+      const parsedRecipe = await parseRecipeText(parseInput, {
+        signal: analysisAbortController.signal
+      });
       const recipe = normalizeRecipeForGuidance(parsedRecipe);
 
+      hideAnalysisOverlay();
       appState.recipe = recipe;
       initializeIngredientChecklist(recipe);
       appState.preparationIndex = 0;
@@ -1030,27 +1098,21 @@ function renderHome() {
       appState.timerSkippedStepIndex = null;
       setScreen("analysis");
     } catch (error) {
+      if (error && error.name === "AbortError") {
+        return;
+      }
+
       console.error("Recipe parsing failed:", error);
+      hideAnalysisOverlay();
       const message = error && error.message ? error.message : "Could not parse recipe. Please try again.";
-      alert(message);
-      startBtn.disabled = false;
-      startBtn.textContent = "Start Cooking";
+      validation.textContent = message;
+      validation.hidden = false;
     }
   });
 
   actions.append(startBtn);
   screen.appendChild(actions);
   screen.appendChild(textToggle);
-
-  const clearValidation = () => {
-    if (validation.hidden) {
-      return;
-    }
-    if (urlInput.value.trim() || textInput.value.trim()) {
-      validation.hidden = true;
-      validation.textContent = "";
-    }
-  };
 
   urlInput.addEventListener("input", clearValidation);
   textInput.addEventListener("input", clearValidation);

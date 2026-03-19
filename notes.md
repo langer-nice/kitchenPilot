@@ -7,25 +7,13 @@ Open AI - API Keys :
 https://platform.openai.com/api-keys
 
 
-Ingredients
-300g spaghetti
-2 garlic cloves
-2 tbsp olive oil
-
-Instructions
-Boil the spaghetti for 10 minutes.
-Heat olive oil in a pan.
-Add garlic and cook for 30 seconds.
-Add the pasta and mix.
-
-
 
 unset OPENAI_API_KEY
 export OPENAI_API_KEY="sk-...YOUR_NEW_REAL_KEY..."
  
 echo "$OPENAI_API_KEY" | cut -c1-12 
 
-Start server
+# Start server
 cd /Users/davidlang/documents-local/design/kitchenPilot/kitchenpilot
 npm start
 

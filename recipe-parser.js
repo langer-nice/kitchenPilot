@@ -1,5 +1,6 @@
-async function parseRecipeText(recipeText) {
+async function parseRecipeText(recipeText, options = {}) {
   try {
+    const { signal } = options;
     const isLiveServerLocal =
       (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") &&
       window.location.port === "5500";
@@ -8,6 +9,7 @@ async function parseRecipeText(recipeText) {
 
     const response = await fetch(endpoint, {
       method: "POST",
+      signal,
       headers: {
         "Content-Type": "application/json",
         "Accept": "application/json"
