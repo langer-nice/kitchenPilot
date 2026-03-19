@@ -1,6 +1,10 @@
 const appState = {
   currentScreen: "home",
   recipe: null,
+  homeRecipeUrl: "",
+  homeRecipeText: "",
+  homeTextInputVisible: false,
+  homeValidationMessage: "",
   ingredientChecks: [],
   preparationIndex: 0,
   cookingIndex: 0,
@@ -83,7 +87,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v39"; 
+const BUILD_VERSION = "DEV BUILD: v40"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const timerDoneAudio = typeof Audio !== "undefined" ? new Audio("assets/timer-done.wav") : null;
 const VOICE_ONBOARDING_STORAGE_KEY = "voiceOnboardingSeen";
@@ -1706,7 +1710,6 @@ function createTitledPage(title, subtitle, screenClassName = "") {
 
 function renderHome() {
   const screen = clearAndSetScreenTitle("KitchenPilot", "Hands-free cooking guide");
-  let isTextInputVisible = false;
   let isAnalyzing = false;
   let currentAnalysisController = null;
   let loadingOverlay = null;
@@ -1721,6 +1724,7 @@ function renderHome() {
   urlInput.id = "recipeUrl";
   urlInput.placeholder = "Paste a recipe link";
   urlInput.type = "url";
+  urlInput.value = appState.homeRecipeUrl || "";
 
   const textLabel = document.createElement("label");
   textLabel.textContent = "Recipe Text";
@@ -1729,7 +1733,8 @@ function renderHome() {
   const textInput = document.createElement("textarea");
   textInput.id = "recipeText";
   textInput.placeholder = "Paste your recipe text here";
-  textInput.hidden = true;
+  textInput.value = appState.homeRecipeText || "";
+  textInput.hidden = !appState.homeTextInputVisible;
 
   const textToggle = document.createElement("button");
   textToggle.type = "button";
@@ -1737,21 +1742,22 @@ function renderHome() {
   textToggle.textContent = "Paste recipe text instead";
 
   function syncTextInputVisibility() {
-    textInput.hidden = !isTextInputVisible;
-    textLabel.hidden = !isTextInputVisible;
-    textToggle.textContent = isTextInputVisible ? "Hide recipe text input" : "Paste recipe text instead";
+    textInput.hidden = !appState.homeTextInputVisible;
+    textLabel.hidden = !appState.homeTextInputVisible;
+    textToggle.textContent = appState.homeTextInputVisible ? "Hide recipe text input" : "Paste recipe text instead";
   }
 
   textToggle.addEventListener("click", () => {
-    isTextInputVisible = !isTextInputVisible;
+    appState.homeTextInputVisible = !appState.homeTextInputVisible;
     syncTextInputVisibility();
   });
 
   const validation = document.createElement("p");
   validation.className = "form-error";
-  validation.hidden = true;
+  validation.hidden = !appState.homeValidationMessage;
+  validation.textContent = appState.homeValidationMessage || "";
 
-  textLabel.hidden = true;
+  textLabel.hidden = !appState.homeTextInputVisible;
   card.append(urlLabel, urlInput, textLabel, textInput, validation);
   screen.appendChild(card);
 
@@ -1812,16 +1818,20 @@ function renderHome() {
       return;
     }
 
+    appState.homeRecipeUrl = urlInput.value;
+    appState.homeRecipeText = textInput.value;
     const recipeUrl = urlInput.value.trim();
     const recipeText = textInput.value.trim();
     const parseInput = recipeText || recipeUrl;
 
     if (!parseInput) {
-      validation.textContent = "Please paste a recipe URL or recipe text before continuing.";
+      appState.homeValidationMessage = "Please paste a recipe URL or recipe text before continuing.";
+      validation.textContent = appState.homeValidationMessage;
       validation.hidden = false;
       return;
     }
 
+    appState.homeValidationMessage = "";
     validation.hidden = true;
     validation.textContent = "";
 
@@ -1851,6 +1861,7 @@ function renderHome() {
 
       console.error("Recipe parsing failed:", error);
       const message = error && error.message ? error.message : "Could not parse recipe. Please try again.";
+      appState.homeValidationMessage = message;
       validation.textContent = message;
       validation.hidden = false;
       resetAnalysisUi();
@@ -1876,16 +1887,20 @@ function renderHome() {
     exampleActions.className = "button-row";
 
     const loadExampleUrlBtn = createButton("Load example URL", "", () => {
-      urlInput.value = EXAMPLE_RECIPE_URL;
-      textInput.value = "";
+      appState.homeRecipeUrl = EXAMPLE_RECIPE_URL;
+      appState.homeRecipeText = "";
+      urlInput.value = appState.homeRecipeUrl;
+      textInput.value = appState.homeRecipeText;
       clearValidation();
     });
 
     const loadExampleTextBtn = createButton(EXAMPLE_RECIPE_BUTTON_LABEL, "", () => {
-      isTextInputVisible = true;
+      appState.homeTextInputVisible = true;
       syncTextInputVisibility();
-      textInput.value = EXAMPLE_RECIPE_TEXT;
-      urlInput.value = "";
+      appState.homeRecipeText = EXAMPLE_RECIPE_TEXT;
+      appState.homeRecipeUrl = "";
+      textInput.value = appState.homeRecipeText;
+      urlInput.value = appState.homeRecipeUrl;
       clearValidation();
     });
 
@@ -1939,13 +1954,20 @@ function renderHome() {
       return;
     }
     if (urlInput.value.trim() || textInput.value.trim()) {
+      appState.homeValidationMessage = "";
       validation.hidden = true;
       validation.textContent = "";
     }
   };
 
-  urlInput.addEventListener("input", clearValidation);
-  textInput.addEventListener("input", clearValidation);
+  urlInput.addEventListener("input", () => {
+    appState.homeRecipeUrl = urlInput.value;
+    clearValidation();
+  });
+  textInput.addEventListener("input", () => {
+    appState.homeRecipeText = textInput.value;
+    clearValidation();
+  });
   syncTextInputVisibility();
 }
 
