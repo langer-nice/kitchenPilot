@@ -951,6 +951,11 @@ button.danger,
   backdrop-filter: blur(3px);
 }
 
+.voice-onboarding-overlay {
+  align-items: center;
+  padding: 20px 16px;
+}
+
 .voice-modal {
   width: min(100%, 420px);
   display: flex;
@@ -973,6 +978,26 @@ button.danger,
   color: var(--color-text-secondary);
   font-size: 0.96rem;
   line-height: 1.45;
+}
+
+.voice-onboarding-modal {
+  width: min(100%, 360px);
+}
+
+.voice-onboarding-checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--color-text-secondary);
+  font-size: 0.92rem;
+  font-weight: 500;
+}
+
+.voice-onboarding-checkbox input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
 }
 
 .stage-actions {

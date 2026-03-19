@@ -83,8 +83,9 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v31"; 
+const BUILD_VERSION = "DEV BUILD: v32"; 
 const timerDoneAudio = typeof Audio !== "undefined" ? new Audio("assets/timer-done.wav") : null;
+const VOICE_ONBOARDING_STORAGE_KEY = "voiceOnboardingSeen";
 
 if (timerDoneAudio) {
   timerDoneAudio.preload = "auto";
@@ -724,6 +725,102 @@ function unlockVoiceAssistant(options = {}) {
     hintMessage: enableHintMessage,
     hintMs: enableHintMs
   });
+}
+
+function hasSeenVoiceOnboarding() {
+  try {
+    return window.localStorage.getItem(VOICE_ONBOARDING_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function markVoiceOnboardingSeen() {
+  try {
+    window.localStorage.setItem(VOICE_ONBOARDING_STORAGE_KEY, "true");
+  } catch {
+    // Ignore storage failures in private browsing or restricted environments.
+  }
+}
+
+function showVoiceOnboardingOverlay(targetScreen) {
+  if (document.querySelector(".voice-onboarding-overlay")) {
+    return;
+  }
+
+  const overlay = document.createElement("div");
+  overlay.className = "voice-modal-overlay voice-onboarding-overlay";
+
+  const modal = document.createElement("div");
+  modal.className = "voice-modal voice-onboarding-modal";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+  modal.setAttribute("aria-label", "Voice onboarding");
+
+  const title = document.createElement("h2");
+  title.textContent = "Use your voice to control cooking";
+
+  const copy = document.createElement("p");
+  copy.className = "voice-modal-copy";
+  copy.textContent = "Tap 'Enable Voice' and say things like 'next step' or 'repeat'";
+
+  const checkboxRow = document.createElement("label");
+  checkboxRow.className = "voice-onboarding-checkbox";
+
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+
+  const checkboxText = document.createElement("span");
+  checkboxText.textContent = "Don't show again";
+
+  checkboxRow.append(checkbox, checkboxText);
+
+  const primaryBtn = createButton("Enable Voice", "primary", () => {
+    markVoiceOnboardingSeen();
+    overlay.remove();
+
+    if (typeof unlockVoiceAssistant === "function" && !appState.voiceUnlocked) {
+      unlockVoiceAssistant({
+        statusMessage: "Voice ready",
+        enableHintMessage: "Voice commands enabled. Say: Next, Repeat, Pause.",
+        enableHintMs: 2200
+      });
+      return;
+    }
+
+    setVoiceEnabled(true, {
+      hintMessage: "Voice commands enabled. Say: Next, Repeat, Pause.",
+      hintMs: 2200
+    });
+
+    if (targetScreen === "ingredients") {
+      renderIngredients();
+    }
+    if (targetScreen === "preparation") {
+      renderPreparation();
+    }
+  });
+
+  const secondaryBtn = createButton("Not now", "", () => {
+    markVoiceOnboardingSeen();
+    overlay.remove();
+  });
+
+  const actions = document.createElement("div");
+  actions.className = "button-row";
+  actions.append(primaryBtn, secondaryBtn);
+
+  modal.append(title, copy, checkboxRow, actions);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+}
+
+function maybeShowVoiceOnboarding(targetScreen) {
+  if (appState.voiceEnabled || hasSeenVoiceOnboarding()) {
+    return;
+  }
+
+  showVoiceOnboardingOverlay(targetScreen);
 }
 
 function getCurrentCookingStep() {
@@ -2031,6 +2128,8 @@ function renderIngredients() {
     createButton("Ready", "primary", () => setScreen("preparationIntro"))
   );
   footer.appendChild(actions);
+
+  maybeShowVoiceOnboarding("ingredients");
 }
 
 function renderPreparation() {
@@ -2088,6 +2187,8 @@ function renderPreparation() {
   );
 
   footer.append(primaryRow, secondaryRow);
+
+  maybeShowVoiceOnboarding("preparation");
 }
 
 function startStepTimerIfNeeded(step) {
