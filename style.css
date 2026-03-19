@@ -1163,6 +1163,14 @@ button[data-action]:not(.primary).voice-active {
   gap: 12px;
 }
 
+.analysis-actions {
+  width: 100%;
+}
+
+.analysis-actions button {
+  min-height: 56px;
+}
+
 .cooking-actions {
   display: flex;
   flex-direction: row;

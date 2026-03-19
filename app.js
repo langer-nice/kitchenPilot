@@ -83,7 +83,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v29"; 
+const BUILD_VERSION = "DEV BUILD: v30"; 
 const timerDoneAudio = typeof Audio !== "undefined" ? new Audio("assets/timer-done.wav") : null;
 
 if (timerDoneAudio) {
@@ -1772,7 +1772,7 @@ function renderAnalysis() {
     return;
   }
 
-  const screen = clearAndSetScreenTitle("Recipe Analysis", "Review parsed steps before cooking");
+  const { content, footer } = createTitledPage("Recipe Analysis", "Review parsed steps before cooking");
 
   const summaryCard = createCard();
   const recipeTitle = document.createElement("h2");
@@ -1792,16 +1792,16 @@ function renderAnalysis() {
 
   summaryList.append(ingredientCount, prepCount, cookingCount);
   summaryCard.append(recipeTitle, summaryList);
-  screen.appendChild(summaryCard);
+  content.appendChild(summaryCard);
 
   const actions = document.createElement("div");
-  actions.className = "button-row";
+  actions.className = "button-row analysis-actions";
   actions.append(
     createButton("Start Guided Cooking", "primary", () => setScreen("ingredientsIntro")),
     createButton("Back to Home", "", () => setScreen("home"))
   );
 
-  screen.appendChild(actions);
+  footer.appendChild(actions);
 }
 
 function renderStageIntro(title, description, backScreen, continueScreen, continueLabel, helperNote, stageLabelText = "") {
@@ -2066,25 +2066,29 @@ function renderPreparation() {
     speak(currentText);
   }
 
-  const actions = document.createElement("div");
-  actions.className = "button-row three";
+  const primaryRow = document.createElement("div");
+  primaryRow.className = "action-row cooking-actions primary-actions";
+  primaryRow.append(
+    createButton("Repeat", "primary btn-next", () => speak(currentText), "repeat"),
+    createButton("Next", "primary btn-next", () => {
+      advancePreparationStep();
+    }, "next")
+  );
 
-  actions.append(
-    createButton("Back", "", () => {
+  const secondaryRow = document.createElement("div");
+  secondaryRow.className = "action-row secondary-actions";
+  secondaryRow.append(
+    createButton("Back", "ghost-action", () => {
       if (appState.preparationIndex > 0) {
         appState.preparationIndex -= 1;
         renderPreparation();
       } else {
         openPreparationIntro();
       }
-    }, "back"),
-    createButton("Repeat", "", () => speak(currentText), "repeat"),
-    createButton("Next", "primary", () => {
-      advancePreparationStep();
-    }, "next")
+    }, "back")
   );
 
-  footer.appendChild(actions);
+  footer.append(primaryRow, secondaryRow);
 }
 
 function startStepTimerIfNeeded(step) {
