@@ -83,7 +83,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v32"; 
+const BUILD_VERSION = "DEV BUILD: v33"; 
 const timerDoneAudio = typeof Audio !== "undefined" ? new Audio("assets/timer-done.wav") : null;
 const VOICE_ONBOARDING_STORAGE_KEY = "voiceOnboardingSeen";
 
@@ -743,7 +743,7 @@ function markVoiceOnboardingSeen() {
   }
 }
 
-function showVoiceOnboardingOverlay(targetScreen) {
+function showVoiceOnboardingOverlay(onContinue) {
   if (document.querySelector(".voice-onboarding-overlay")) {
     return;
   }
@@ -785,25 +785,24 @@ function showVoiceOnboardingOverlay(targetScreen) {
         enableHintMessage: "Voice commands enabled. Say: Next, Repeat, Pause.",
         enableHintMs: 2200
       });
-      return;
+    } else {
+      setVoiceEnabled(true, {
+        hintMessage: "Voice commands enabled. Say: Next, Repeat, Pause.",
+        hintMs: 2200
+      });
     }
 
-    setVoiceEnabled(true, {
-      hintMessage: "Voice commands enabled. Say: Next, Repeat, Pause.",
-      hintMs: 2200
-    });
-
-    if (targetScreen === "ingredients") {
-      renderIngredients();
-    }
-    if (targetScreen === "preparation") {
-      renderPreparation();
+    if (typeof onContinue === "function") {
+      onContinue();
     }
   });
 
   const secondaryBtn = createButton("Not now", "", () => {
     markVoiceOnboardingSeen();
     overlay.remove();
+    if (typeof onContinue === "function") {
+      onContinue();
+    }
   });
 
   const actions = document.createElement("div");
@@ -815,12 +814,15 @@ function showVoiceOnboardingOverlay(targetScreen) {
   document.body.appendChild(overlay);
 }
 
-function maybeShowVoiceOnboarding(targetScreen) {
+function maybeShowVoiceOnboarding(onContinue) {
   if (appState.voiceEnabled || hasSeenVoiceOnboarding()) {
+    if (typeof onContinue === "function") {
+      onContinue();
+    }
     return;
   }
 
-  showVoiceOnboardingOverlay(targetScreen);
+  showVoiceOnboardingOverlay(onContinue);
 }
 
 function getCurrentCookingStep() {
@@ -1893,7 +1895,9 @@ function renderAnalysis() {
   const actions = document.createElement("div");
   actions.className = "button-row analysis-actions";
   actions.append(
-    createButton("Start Guided Cooking", "primary", () => setScreen("ingredientsIntro")),
+    createButton("Start Guided Cooking", "primary", () => {
+      maybeShowVoiceOnboarding(() => setScreen("ingredientsIntro"));
+    }),
     createButton("Back to Home", "", () => setScreen("home"))
   );
 
@@ -2128,8 +2132,6 @@ function renderIngredients() {
     createButton("Ready", "primary", () => setScreen("preparationIntro"))
   );
   footer.appendChild(actions);
-
-  maybeShowVoiceOnboarding("ingredients");
 }
 
 function renderPreparation() {
@@ -2187,8 +2189,6 @@ function renderPreparation() {
   );
 
   footer.append(primaryRow, secondaryRow);
-
-  maybeShowVoiceOnboarding("preparation");
 }
 
 function startStepTimerIfNeeded(step) {
