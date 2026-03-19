@@ -83,7 +83,8 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v37"; 
+const BUILD_VERSION = "DEV BUILD: v38"; 
+const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const timerDoneAudio = typeof Audio !== "undefined" ? new Audio("assets/timer-done.wav") : null;
 const VOICE_ONBOARDING_STORAGE_KEY = "voiceOnboardingSeen";
 
@@ -833,6 +834,22 @@ function maybeShowVoiceOnboarding(onContinue) {
   }
 
   showVoiceOnboardingOverlay(onContinue);
+}
+
+function getDevModeEnabled() {
+  try {
+    return window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function setDevModeEnabled(enabled) {
+  try {
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, enabled ? "true" : "false");
+  } catch {
+    // Ignore storage failures in restricted environments.
+  }
 }
 
 function getCurrentCookingStep() {
@@ -1693,6 +1710,32 @@ function renderHome() {
   let isAnalyzing = false;
   let currentAnalysisController = null;
   let loadingOverlay = null;
+  const devModeEnabled = getDevModeEnabled();
+
+  const devModeRow = document.createElement("div");
+  devModeRow.className = "dev-mode-row";
+
+  const devModeLabel = document.createElement("p");
+  devModeLabel.className = "small dev-mode-label";
+  devModeLabel.textContent = "Dev Mode";
+
+  const devModeSwitch = document.createElement("label");
+  devModeSwitch.className = "mic-switch";
+  devModeSwitch.setAttribute("aria-label", "Toggle Dev Mode");
+
+  const devModeInput = document.createElement("input");
+  devModeInput.type = "checkbox";
+  devModeInput.checked = devModeEnabled;
+  devModeInput.addEventListener("change", () => {
+    setDevModeEnabled(devModeInput.checked);
+    renderHome();
+  });
+
+  const devModeSlider = document.createElement("span");
+  devModeSlider.className = "slider";
+  devModeSwitch.append(devModeInput, devModeSlider);
+  devModeRow.append(devModeLabel, devModeSwitch);
+  screen.appendChild(devModeRow);
 
   const card = createCard();
   const urlLabel = document.createElement("label");
@@ -1736,31 +1779,6 @@ function renderHome() {
   textLabel.hidden = true;
   card.append(urlLabel, urlInput, textLabel, textInput, validation);
   screen.appendChild(card);
-
-  const exampleCard = createCard();
-  const exampleTitle = document.createElement("h2");
-  exampleTitle.textContent = "Load example recipe";
-
-  const exampleActions = document.createElement("div");
-  exampleActions.className = "button-row";
-
-  const loadExampleUrlBtn = createButton("Load example URL", "", () => {
-    urlInput.value = EXAMPLE_RECIPE_URL;
-    textInput.value = "";
-    clearValidation();
-  });
-
-  const loadExampleTextBtn = createButton(EXAMPLE_RECIPE_BUTTON_LABEL, "", () => {
-    isTextInputVisible = true;
-    syncTextInputVisibility();
-    textInput.value = EXAMPLE_RECIPE_TEXT;
-    urlInput.value = "";
-    clearValidation();
-  });
-
-  exampleActions.append(loadExampleUrlBtn, loadExampleTextBtn);
-  exampleCard.append(exampleTitle, exampleActions);
-  screen.appendChild(exampleCard);
 
   const actions = document.createElement("div");
   actions.className = "button-row";
@@ -1868,16 +1886,53 @@ function renderHome() {
   screen.appendChild(actions);
   screen.appendChild(textToggle);
 
-  const devResetBtn = createButton("Reset Voice Onboarding", "inline-btn", () => {
-    resetVoiceOnboardingSeen();
-  });
-  devResetBtn.classList.add("homepage-reset-btn");
-  screen.appendChild(devResetBtn);
+  if (devModeEnabled) {
+    const devToolsCard = createCard();
+    devToolsCard.classList.add("dev-tools-card");
 
-  const buildLabel = document.createElement("p");
-  buildLabel.className = "small";
-  buildLabel.textContent = BUILD_VERSION;
-  screen.appendChild(buildLabel);
+    const devToolsTitle = document.createElement("h2");
+    devToolsTitle.textContent = "Dev Tools";
+
+    const buildLabel = document.createElement("p");
+    buildLabel.className = "small";
+    buildLabel.textContent = BUILD_VERSION;
+
+    const exampleActions = document.createElement("div");
+    exampleActions.className = "button-row";
+
+    const loadExampleUrlBtn = createButton("Load example URL", "", () => {
+      urlInput.value = EXAMPLE_RECIPE_URL;
+      textInput.value = "";
+      clearValidation();
+    });
+
+    const loadExampleTextBtn = createButton(EXAMPLE_RECIPE_BUTTON_LABEL, "", () => {
+      isTextInputVisible = true;
+      syncTextInputVisibility();
+      textInput.value = EXAMPLE_RECIPE_TEXT;
+      urlInput.value = "";
+      clearValidation();
+    });
+
+    exampleActions.append(loadExampleUrlBtn, loadExampleTextBtn);
+
+    const devActions = document.createElement("div");
+    devActions.className = "button-row";
+
+    const devResetBtn = createButton("Reset Voice Onboarding", "inline-btn", () => {
+      resetVoiceOnboardingSeen();
+    });
+    devResetBtn.classList.add("homepage-reset-btn");
+
+    const forceOnboardingBtn = createButton("Force Show Voice Onboarding", "inline-btn", () => {
+      showVoiceOnboardingOverlay();
+    });
+    forceOnboardingBtn.classList.add("homepage-reset-btn");
+
+    devActions.append(devResetBtn, forceOnboardingBtn);
+    devToolsCard.append(devToolsTitle, buildLabel, exampleActions, devActions);
+    screen.appendChild(devToolsCard);
+  }
 
   const clearValidation = () => {
     if (validation.hidden) {
@@ -1901,13 +1956,6 @@ function renderAnalysis() {
   }
 
   const { content, footer } = createTitledPage("Recipe Analysis", "Review parsed steps before cooking");
-  const onboardingSeen = hasSeenVoiceOnboarding();
-  const shouldShowOnboarding = !appState.voiceEnabled && !onboardingSeen;
-  const onboardingBlockReason = shouldShowOnboarding
-    ? "not blocked"
-    : appState.voiceEnabled
-      ? "voiceEnabled is already true"
-      : "voiceOnboardingSeen is already true";
 
   const summaryCard = createCard();
   const recipeTitle = document.createElement("h2");
@@ -1929,43 +1977,11 @@ function renderAnalysis() {
   summaryCard.append(recipeTitle, summaryList);
   content.appendChild(summaryCard);
 
-  const debugCard = createCard();
-  const debugTitle = document.createElement("h2");
-  debugTitle.textContent = "Voice Onboarding Debug";
-
-  const debugList = document.createElement("ul");
-  debugList.className = "list";
-
-  const seenItem = document.createElement("li");
-  seenItem.textContent = `onboardingSeen: ${String(onboardingSeen)}`;
-
-  const voiceEnabledItem = document.createElement("li");
-  voiceEnabledItem.textContent = `voiceEnabled: ${String(appState.voiceEnabled)}`;
-
-  const screenItem = document.createElement("li");
-  screenItem.textContent = `currentScreen: ${appState.currentScreen}`;
-
-  const shouldShowItem = document.createElement("li");
-  shouldShowItem.textContent = `shouldShow: ${String(shouldShowOnboarding)}`;
-
-  const reasonItem = document.createElement("li");
-  reasonItem.textContent = `blockedReason: ${onboardingBlockReason}`;
-
-  const hookItem = document.createElement("li");
-  hookItem.textContent = "startGuidedCookingHook: maybeShowVoiceOnboarding -> ingredientsIntro";
-
-  debugList.append(seenItem, voiceEnabledItem, screenItem, shouldShowItem, reasonItem, hookItem);
-  debugCard.append(debugTitle, debugList);
-  content.appendChild(debugCard);
-
   const actions = document.createElement("div");
   actions.className = "button-row analysis-actions";
   actions.append(
     createButton("Start Guided Cooking", "primary", () => {
       maybeShowVoiceOnboarding(() => setScreen("ingredientsIntro"));
-    }),
-    createButton("Force Show Voice Onboarding", "", () => {
-      showVoiceOnboardingOverlay(() => setScreen("ingredientsIntro"));
     }),
     createButton("Back to Home", "", () => setScreen("home"))
   );
