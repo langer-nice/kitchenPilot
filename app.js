@@ -83,7 +83,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v34"; 
+const BUILD_VERSION = "DEV BUILD: v35"; 
 const timerDoneAudio = typeof Audio !== "undefined" ? new Audio("assets/timer-done.wav") : null;
 const VOICE_ONBOARDING_STORAGE_KEY = "voiceOnboardingSeen";
 
@@ -1887,6 +1887,13 @@ function renderAnalysis() {
   }
 
   const { content, footer } = createTitledPage("Recipe Analysis", "Review parsed steps before cooking");
+  const onboardingSeen = hasSeenVoiceOnboarding();
+  const shouldShowOnboarding = !appState.voiceEnabled && !onboardingSeen;
+  const onboardingBlockReason = shouldShowOnboarding
+    ? "not blocked"
+    : appState.voiceEnabled
+      ? "voiceEnabled is already true"
+      : "voiceOnboardingSeen is already true";
 
   const summaryCard = createCard();
   const recipeTitle = document.createElement("h2");
@@ -1908,11 +1915,43 @@ function renderAnalysis() {
   summaryCard.append(recipeTitle, summaryList);
   content.appendChild(summaryCard);
 
+  const debugCard = createCard();
+  const debugTitle = document.createElement("h2");
+  debugTitle.textContent = "Voice Onboarding Debug";
+
+  const debugList = document.createElement("ul");
+  debugList.className = "list";
+
+  const seenItem = document.createElement("li");
+  seenItem.textContent = `onboardingSeen: ${String(onboardingSeen)}`;
+
+  const voiceEnabledItem = document.createElement("li");
+  voiceEnabledItem.textContent = `voiceEnabled: ${String(appState.voiceEnabled)}`;
+
+  const screenItem = document.createElement("li");
+  screenItem.textContent = `currentScreen: ${appState.currentScreen}`;
+
+  const shouldShowItem = document.createElement("li");
+  shouldShowItem.textContent = `shouldShow: ${String(shouldShowOnboarding)}`;
+
+  const reasonItem = document.createElement("li");
+  reasonItem.textContent = `blockedReason: ${onboardingBlockReason}`;
+
+  const hookItem = document.createElement("li");
+  hookItem.textContent = "startGuidedCookingHook: maybeShowVoiceOnboarding -> ingredientsIntro";
+
+  debugList.append(seenItem, voiceEnabledItem, screenItem, shouldShowItem, reasonItem, hookItem);
+  debugCard.append(debugTitle, debugList);
+  content.appendChild(debugCard);
+
   const actions = document.createElement("div");
   actions.className = "button-row analysis-actions";
   actions.append(
     createButton("Start Guided Cooking", "primary", () => {
       maybeShowVoiceOnboarding(() => setScreen("ingredientsIntro"));
+    }),
+    createButton("Force Show Voice Onboarding", "", () => {
+      showVoiceOnboardingOverlay(() => setScreen("ingredientsIntro"));
     }),
     createButton("Back to Home", "", () => setScreen("home"))
   );
