@@ -83,7 +83,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v35"; 
+const BUILD_VERSION = "DEV BUILD: v36"; 
 const timerDoneAudio = typeof Audio !== "undefined" ? new Audio("assets/timer-done.wav") : null;
 const VOICE_ONBOARDING_STORAGE_KEY = "voiceOnboardingSeen";
 
@@ -1554,14 +1554,14 @@ function createCard() {
   return card;
 }
 
-function getTimelineWindow(steps, currentIndex) {
+function getStepListItems(steps, currentIndex) {
   const safeSteps = Array.isArray(steps) ? steps : [];
-  const windowSteps = [];
+  const allSteps = [];
 
   for (let i = 0; i < safeSteps.length; i += 1) {
     const step = safeSteps[i] || {};
     const kind = i < currentIndex ? "past" : i > currentIndex ? "next" : "current";
-    windowSteps.push({
+    allSteps.push({
       index: i,
       text: String(step.text || ""),
       hasTimer: Number.isInteger(step.timerSeconds) && step.timerSeconds > 0,
@@ -1569,22 +1569,28 @@ function getTimelineWindow(steps, currentIndex) {
     });
   }
 
-  return windowSteps;
+  return allSteps;
 }
 
-function createFocusedStepTimeline(steps, currentIndex) {
+function createScrollableStepPanel(steps, currentIndex, options = {}) {
+  const {
+    panelLabel = "Steps",
+    showTimers = false
+  } = options;
+
   const card = createCard();
-  card.classList.add("timeline-card", "step-context-card");
-  card.setAttribute("aria-label", "Cooking steps");
+  card.classList.add("timeline-card", "step-context-card", "step-list-panel");
+  card.setAttribute("aria-label", panelLabel);
 
   const list = document.createElement("ol");
   list.className = "step-timeline";
 
-  const windowSteps = getTimelineWindow(steps, currentIndex);
-  windowSteps.forEach((item) => {
+  const stepItems = getStepListItems(steps, currentIndex);
+  stepItems.forEach((item) => {
     const li = document.createElement("li");
     li.className = `timeline-item step-item step-${item.kind} ${item.kind}`;
     li.dataset.stepKind = item.kind;
+    li.dataset.stepIndex = String(item.index);
 
     const textWrap = document.createElement("div");
     textWrap.className = "step-text";
@@ -1600,7 +1606,7 @@ function createFocusedStepTimeline(steps, currentIndex) {
     textWrap.append(stepLabel, text);
     li.appendChild(textWrap);
 
-    if (item.hasTimer) {
+    if (showTimers && item.hasTimer) {
       const timerIcon = document.createElement("div");
       timerIcon.className = "step-timer-icon";
       timerIcon.setAttribute("aria-hidden", "true");
@@ -1612,6 +1618,14 @@ function createFocusedStepTimeline(steps, currentIndex) {
   });
 
   card.appendChild(list);
+
+  window.requestAnimationFrame(() => {
+    const currentItem = list.querySelector('[data-step-kind="current"]');
+    if (currentItem) {
+      currentItem.scrollIntoView({ block: "nearest" });
+    }
+  });
+
   return card;
 }
 
@@ -2205,16 +2219,14 @@ function renderPreparation() {
   const idx = appState.preparationIndex;
   const currentText = appState.recipe.preparationSteps[idx];
 
-  const { content, footer } = createTitledPage("Preparation", `Preparation ${idx + 1} of ${total}`, "page-shell--guided");
+  const { content, footer } = createTitledPage("Preparation", `Preparation ${idx + 1} of ${total}`, "page-shell--guided preparation-screen");
   content.appendChild(createVoiceIndicatorBar("preparation"));
   appendVoiceError(content);
-
-  const card = createCard();
-  const text = document.createElement("p");
-  text.className = "instruction";
-  text.textContent = currentText;
-  card.appendChild(text);
-  content.appendChild(card);
+  content.appendChild(createScrollableStepPanel(
+    appState.recipe.preparationSteps.map((stepText) => ({ text: stepText })),
+    idx,
+    { panelLabel: "Preparation steps" }
+  ));
 
   if (appState.lastSpokenPreparationIndex !== idx) {
     appState.lastSpokenPreparationIndex = idx;
@@ -2387,7 +2399,11 @@ function renderCooking() {
     content.appendChild(timerCard);
   }
 
-  content.appendChild(createFocusedStepTimeline(appState.recipe.cookingSteps, idx));
+  content.appendChild(createScrollableStepPanel(
+    appState.recipe.cookingSteps,
+    idx,
+    { panelLabel: "Cooking steps", showTimers: true }
+  ));
 
   if (!hasTimer) {
     stopTimer();
@@ -2506,7 +2522,11 @@ function renderTimerActive() {
   timerCard.append(timerIcon, timerText);
   content.appendChild(timerCard);
 
-  content.appendChild(createFocusedStepTimeline(appState.recipe.cookingSteps, idx));
+  content.appendChild(createScrollableStepPanel(
+    appState.recipe.cookingSteps,
+    idx,
+    { panelLabel: "Cooking steps", showTimers: true }
+  ));
 
   content.appendChild(createVoiceIndicatorBar("timerActive"));
   appendVoiceError(content);

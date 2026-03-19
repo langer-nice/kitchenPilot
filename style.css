@@ -384,6 +384,11 @@ button.danger,
   padding: 6px 8px;
 }
 
+.step-list-panel {
+  display: flex;
+  flex-direction: column;
+}
+
 .step-timeline {
   list-style: none;
   margin: 0;
@@ -581,6 +586,7 @@ button.danger,
   overflow: hidden;
 }
 
+.preparation-screen .page-content,
 .cooking-screen .page-content,
 .cooking-container .page-content {
   overflow: hidden;
