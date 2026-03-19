@@ -87,7 +87,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v44"; 
+const BUILD_VERSION = "DEV BUILD: v49"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -2693,10 +2693,10 @@ function renderCompleted() {
   main.append(recipeIcon, message, subtext);
 
   const footer = document.createElement("div");
-  footer.className = "stage-screen__footer completed-screen__footer";
+  footer.className = "completed-screen__footer action-bar";
 
   const actions = document.createElement("div");
-  actions.className = "button-row completed-actions";
+  actions.className = "completed-actions";
   actions.append(
     createButton("Cook Again", "primary", () => {
       appState.preparationIndex = 0;
