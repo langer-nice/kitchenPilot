@@ -1261,6 +1261,68 @@ function createIntroVoiceCard(titleText = "Enable voice commands for hands-free 
   return voiceCard;
 }
 
+function createCompactVoiceStrip(options = {}) {
+  const {
+    hintMessage = "Voice commands enabled. Say: Next, Repeat, Pause.",
+    hintMs = 2200,
+    showListeningText = false,
+    animateListening = true
+  } = options;
+
+  const voiceRow = document.createElement("div");
+  voiceRow.className = "header-row row-2 voice-panel compact-voice";
+  if (appState.voiceEnabled) {
+    voiceRow.classList.add("voice-active");
+  }
+  if (!animateListening) {
+    voiceRow.classList.add("voice-panel--static");
+  }
+
+  const voiceLabel = document.createElement("p");
+  voiceLabel.className = "meta voice-label";
+
+  const voiceIcon = document.createElement("i");
+  voiceIcon.className = "fa-solid fa-microphone voice-icon";
+  voiceIcon.setAttribute("aria-hidden", "true");
+
+  const voiceText = document.createElement("span");
+  if (showListeningText) {
+    voiceText.textContent = appState.voiceListening ? "Voice listening" : "Voice";
+  } else {
+    voiceText.textContent = "Voice";
+  }
+
+  voiceLabel.append(voiceIcon, voiceText);
+
+  const voiceSwitchLabel = document.createElement("label");
+  voiceSwitchLabel.className = "mic-switch";
+  if (animateListening && appState.voiceListening) {
+    voiceSwitchLabel.classList.add("listening");
+  }
+  voiceSwitchLabel.setAttribute("aria-label", "Toggle voice commands");
+
+  const voiceToggleInput = document.createElement("input");
+  voiceToggleInput.type = "checkbox";
+  voiceToggleInput.checked = appState.voiceEnabled;
+  voiceToggleInput.disabled = !SpeechRecognition;
+  voiceToggleInput.addEventListener("click", (event) => {
+    event.preventDefault();
+    const nextEnabled = !appState.voiceEnabled;
+    setVoiceEnabled(nextEnabled, {
+      hintMessage,
+      hintMs
+    });
+  });
+
+  const slider = document.createElement("span");
+  slider.className = "slider";
+
+  voiceSwitchLabel.append(voiceToggleInput, slider);
+  voiceRow.append(voiceLabel, voiceSwitchLabel);
+
+  return voiceRow;
+}
+
 function renderIngredientsIntro() {
   appEl.innerHTML = "";
   const screen = document.createElement("div");
@@ -1354,48 +1416,10 @@ function renderIngredients() {
   }
 
   const { content, footer } = createTitledPage("Ingredient Check", "Verify ingredients before you begin");
-
-  const voiceRow = document.createElement("div");
-  voiceRow.className = "header-row row-2 voice-panel compact-voice";
-  if (appState.voiceEnabled) {
-    voiceRow.classList.add("voice-active");
-  }
-
-  const voiceLabel = document.createElement("p");
-  voiceLabel.className = "meta voice-label";
-  const voiceIcon = document.createElement("i");
-  voiceIcon.className = "fa-solid fa-microphone voice-icon";
-  voiceIcon.setAttribute("aria-hidden", "true");
-  const voiceText = document.createElement("span");
-  voiceText.textContent = appState.voiceListening ? "Voice listening" : "Voice";
-  voiceLabel.append(voiceIcon, voiceText);
-
-  const voiceSwitchLabel = document.createElement("label");
-  voiceSwitchLabel.className = "mic-switch";
-  if (appState.voiceListening) {
-    voiceSwitchLabel.classList.add("listening");
-  }
-  voiceSwitchLabel.setAttribute("aria-label", "Toggle voice commands");
-
-  const voiceToggleInput = document.createElement("input");
-  voiceToggleInput.type = "checkbox";
-  voiceToggleInput.checked = appState.voiceEnabled;
-  voiceToggleInput.disabled = !SpeechRecognition;
-  voiceToggleInput.addEventListener("click", (event) => {
-    event.preventDefault();
-    const nextEnabled = !appState.voiceEnabled;
-    setVoiceEnabled(nextEnabled, {
-      hintMessage: "Voice commands enabled. Say: Next, Repeat, Pause.",
-      hintMs: 2200
-    });
-  });
-
-  const slider = document.createElement("span");
-  slider.className = "slider";
-  voiceSwitchLabel.append(voiceToggleInput, slider);
-  voiceRow.append(voiceLabel, voiceSwitchLabel);
-  content.appendChild(voiceRow);
-  appendVoiceCommandStatus(content);
+  content.appendChild(createCompactVoiceStrip({
+    showListeningText: false,
+    animateListening: false
+  }));
   appendVoiceError(content);
 
   const card = createCard();

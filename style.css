@@ -630,6 +630,10 @@ button.danger,
   animation: mic-icon-pulse 1.4s ease-in-out infinite;
 }
 
+.voice-panel--static.voice-active .voice-icon {
+  animation: none;
+}
+
 .voice-hint {
   margin-top: -2px;
   font-size: 0.86rem;
