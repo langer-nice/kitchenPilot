@@ -378,8 +378,9 @@ button.danger,
 
 .timeline-card,
 .step-context-card {
-  overflow: visible;
-  flex-shrink: 0;
+  overflow: hidden;
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 6px 8px;
 }
 
@@ -387,9 +388,12 @@ button.danger,
   list-style: none;
   margin: 0;
   padding: 0;
+  height: 100%;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  padding-right: 4px;
 }
 
 .timeline-item,
@@ -574,6 +578,11 @@ button.danger,
 .cooking-screen,
 .cooking-container {
   gap: 10px;
+  overflow: hidden;
+}
+
+.cooking-screen .page-content,
+.cooking-container .page-content {
   overflow: hidden;
 }
 

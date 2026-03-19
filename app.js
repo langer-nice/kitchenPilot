@@ -83,7 +83,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v30"; 
+const BUILD_VERSION = "DEV BUILD: v31"; 
 const timerDoneAudio = typeof Audio !== "undefined" ? new Audio("assets/timer-done.wav") : null;
 
 if (timerDoneAudio) {
@@ -1447,11 +1447,9 @@ function createCard() {
 
 function getTimelineWindow(steps, currentIndex) {
   const safeSteps = Array.isArray(steps) ? steps : [];
-  const start = Math.max(0, currentIndex - 1);
-  const end = Math.min(safeSteps.length - 1, currentIndex + 1);
   const windowSteps = [];
 
-  for (let i = start; i <= end; i += 1) {
+  for (let i = 0; i < safeSteps.length; i += 1) {
     const step = safeSteps[i] || {};
     const kind = i < currentIndex ? "past" : i > currentIndex ? "next" : "current";
     windowSteps.push({
@@ -1468,6 +1466,7 @@ function getTimelineWindow(steps, currentIndex) {
 function createFocusedStepTimeline(steps, currentIndex) {
   const card = createCard();
   card.classList.add("timeline-card", "step-context-card");
+  card.setAttribute("aria-label", "Cooking steps");
 
   const list = document.createElement("ol");
   list.className = "step-timeline";
