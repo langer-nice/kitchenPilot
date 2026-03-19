@@ -93,6 +93,108 @@ const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
 const timerDoneAudio = typeof Audio !== "undefined" ? new Audio("assets/timer-done.wav") : null;
 const VOICE_ONBOARDING_STORAGE_KEY = "voiceOnboardingSeen";
+const LONG_TIMER_THRESHOLD_SECONDS = 10 * 60;
+const PREP_TRANSFORM_KEYWORDS = [
+  "chopped", "diced", "sliced", "grated", "minced", "crushed", "peeled", "trimmed",
+  "whisked", "rolled", "beaten", "halved", "quartered", "cubed", "shredded", "drained",
+  "rinsed", "torn", "cut", "softened"
+];
+const PREP_ACTION_KEYWORDS = [
+  "chop", "dice", "slice", "grate", "mince", "crush", "peel", "trim", "whisk", "roll",
+  "beat", "tie", "tuck", "stuff", "season", "scatter", "drain", "cube", "cut", "line",
+  "prick", "gather", "slacken", "mix", "prepare", "pat dry", "remove giblets"
+];
+const COOKING_KEYWORDS = [
+  "preheat", "heat", "cook", "roast", "bake", "fry", "boil", "simmer", "saute", "sautee",
+  "oven", "stovetop", "gas", "fan", "degrees", "temperature", "bring to the boil",
+  "bring to a boil", "gentle boil", "reduce heat", "lower the oven", "lower heat",
+  "until tender", "until golden", "until set", "minutes", "minute", "hours", "hour"
+];
+const RECIPE_FLOW_PROTOTYPE_EXAMPLES = [
+  {
+    title: "Ina Garten's Perfect Roast Chicken",
+    sourceUrl: "https://cooking.nytimes.com/recipes/1026751-ina-gartens-perfect-roast-chicken",
+    ingredients: [
+      "1 roasting chicken",
+      "Kosher salt",
+      "Freshly ground black pepper",
+      "1 large bunch fresh thyme",
+      "1 lemon, halved",
+      "1 head garlic, cut in half crosswise",
+      "2 tablespoons butter, melted",
+      "1 large yellow onion, thickly sliced",
+      "4 carrots, cut into 2-inch chunks",
+      "1 bulb fennel, tops removed and cut into wedges",
+      "Olive oil"
+    ],
+    preparationSteps: [],
+    cookingSteps: [
+      { text: "Preheat the oven to 425 degrees F." },
+      { text: "Remove the chicken giblets and pat the chicken dry. Season the chicken inside and out. Stuff the cavity with thyme, lemon, and garlic. Brush the outside with melted butter. Tie the legs together and tuck the wing tips under. Place the onions, carrots, and fennel in a roasting pan, toss with thyme and olive oil, and place the chicken on top." },
+      { text: "Roast the chicken for 1 1/2 hours, or until the juices run clear.", timerSeconds: 90 * 60 },
+      { text: "Let the chicken rest for about 20 minutes before slicing and serving with the vegetables.", timerSeconds: 20 * 60 }
+    ]
+  },
+  {
+    title: "Ultimate Quiche Lorraine",
+    sourceUrl: "https://www.bbcgoodfood.com/recipes/ultimate-quiche-lorraine",
+    ingredients: [
+      "175g plain flour",
+      "100g cold butter, cut into pieces",
+      "1 egg yolk",
+      "200g lardons",
+      "50g gruyere, divided between small dice and finely grated cheese",
+      "200ml creme fraiche",
+      "200ml double cream",
+      "3 eggs, well beaten",
+      "Ground nutmeg"
+    ],
+    preparationSteps: [],
+    cookingSteps: [
+      { text: "For the pastry, put the flour, butter, egg yolk, and cold water into a food processor and process until the mix binds." },
+      { text: "Tip the pastry onto a lightly floured surface, gather into a smooth ball, then roll out as thinly as you can." },
+      { text: "Line a loose-bottomed flan tin with the pastry and trim the edges. Press the pastry into the flutes, lightly prick the base with a fork, then chill for 10 minutes.", timerSeconds: 10 * 60 },
+      { text: "Put a baking sheet in the oven and heat the oven to 200C. Line the pastry case with foil, fill with dry beans, and bake on the hot sheet for 15 minutes.", timerSeconds: 15 * 60 },
+      { text: "Remove the foil and beans and bake for 4 to 5 minutes more until the pastry is pale golden.", timerSeconds: 5 * 60 },
+      { text: "While the pastry cooks, heat a small frying pan, add the lardons, and fry until they just start to colour. Remove and drain on paper towels." },
+      { text: "Cut three quarters of the gruyere into small dice and finely grate the rest. Scatter the diced gruyere and fried lardons over the pastry case." },
+      { text: "Beat the creme fraiche to slacken it, then slowly beat in the double cream. Mix in the beaten eggs, season, and add a pinch of ground nutmeg. Pour three quarters of the filling into the pastry case." },
+      { text: "Pull the oven shelf out, put the flan tin on the baking sheet, quickly pour in the rest of the filling, scatter the grated cheese over the top, and push the shelf back into the oven." },
+      { text: "Lower the oven to 190C and bake for about 25 minutes, or until golden and softly set.", timerSeconds: 25 * 60 },
+      { text: "Let the quiche settle for 4 to 5 minutes, then remove from the tin and serve.", timerSeconds: 5 * 60 }
+    ]
+  },
+  {
+    title: "Minestrone Soup",
+    sourceUrl: "https://www.loveandlemons.com/minestrone-soup/",
+    ingredients: [
+      "2 tablespoons extra-virgin olive oil",
+      "1 medium yellow onion, chopped",
+      "1 carrot, chopped",
+      "4 kale leaves, stems chopped and leaves torn",
+      "2 to 3 cups small cauliflower pieces",
+      "3 garlic cloves, minced",
+      "1/4 cup white wine",
+      "1 can diced tomatoes",
+      "Fresh thyme and rosemary",
+      "6 cups vegetable broth",
+      "4 to 6 oz pasta",
+      "1 cup cooked chickpeas, drained and rinsed",
+      "Kale and hemp seed pesto",
+      "Chopped parsley (optional)",
+      "Parmesan or pecorino (optional)"
+    ],
+    preparationSteps: [],
+    cookingSteps: [
+      { text: "Heat the oil in a large pot over medium heat. Add the onion, carrot, and a few pinches of salt and pepper. Cook until the onion is soft and translucent, about 10 minutes.", timerSeconds: 10 * 60 },
+      { text: "Stir in the kale stems, cauliflower, and garlic. Season with more salt and pepper and cook 2 more minutes. Add the wine, stir, then add the tomatoes. Simmer for 8 minutes.", timerSeconds: 8 * 60 },
+      { text: "Add the herbs, broth, pasta, and chickpeas and simmer until the cauliflower is tender, about 30 minutes.", timerSeconds: 30 * 60 },
+      { text: "Meanwhile, make the pesto." },
+      { text: "Season the soup to taste. Before serving, stir in the kale until wilted." },
+      { text: "Serve the soup with pesto and chopped parsley on the side." }
+    ]
+  }
+];
 
 if (timerDoneAudio) {
   timerDoneAudio.preload = "auto";
@@ -483,11 +585,187 @@ function splitPreparationActions(preparationSteps) {
   return normalized.filter(Boolean);
 }
 
+function normalizePrototypeText(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9°/\s-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function containsPrototypeKeyword(text, keywords) {
+  const normalized = normalizePrototypeText(text);
+  return keywords.some((keyword) => normalized.includes(normalizePrototypeText(keyword)));
+}
+
+function parseStepDurationSeconds(step) {
+  if (Number.isFinite(step?.timerSeconds) && step.timerSeconds > 0) {
+    return step.timerSeconds;
+  }
+
+  const text = String(step?.text || step || "");
+  const hourMatch = text.match(/(\d+(?:\s*1\/2|\.\d+)?)\s*(hour|hours|hr|hrs)/i);
+  if (hourMatch) {
+    const raw = hourMatch[1].replace(/\s+/g, "");
+    const hours = raw.includes("1/2") ? Number.parseInt(raw, 10) + 0.5 : Number.parseFloat(raw);
+    if (Number.isFinite(hours)) {
+      return Math.round(hours * 60 * 60);
+    }
+  }
+
+  const minuteMatch = text.match(/(\d+)\s*(minute|minutes|min|mins)/i);
+  if (minuteMatch) {
+    const minutes = Number.parseInt(minuteMatch[1], 10);
+    if (Number.isFinite(minutes)) {
+      return minutes * 60;
+    }
+  }
+
+  return 0;
+}
+
+function isCookingLikeText(text) {
+  return containsPrototypeKeyword(text, COOKING_KEYWORDS);
+}
+
+function isPrepLikeText(text) {
+  return containsPrototypeKeyword(text, PREP_ACTION_KEYWORDS) || containsPrototypeKeyword(text, PREP_TRANSFORM_KEYWORDS);
+}
+
+function splitPrototypeClauses(text) {
+  return String(text || "")
+    .split(/\s*(?:\.|;|, then | then | and then )\s*/i)
+    .map((clause) => clause.trim())
+    .filter(Boolean);
+}
+
+function uniquePush(target, value) {
+  if (value && !target.includes(value)) {
+    target.push(value);
+  }
+}
+
+function extractIngredientTokensForPrototype(ingredient) {
+  const normalized = normalizePrototypeText(ingredient)
+    .replace(/\b(optional|plus|divided|between|small|large|medium|fresh|ground|extra-virgin|well|crosswise|pieces|piece|pinch|cups?|tablespoons?|tbsp|teaspoons?|tsp|grams?|g|kg|ml|oz|lb|lbs)\b/g, " ")
+    .replace(/\b\d+(?:\/\d+)?\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return normalized
+    .split(" ")
+    .filter((token) => token.length > 2 && !PREP_TRANSFORM_KEYWORDS.includes(token));
+}
+
+function ingredientHasPrepDescriptor(ingredient) {
+  return containsPrototypeKeyword(ingredient, PREP_TRANSFORM_KEYWORDS);
+}
+
+function hasLongTimerBeforeIndex(cookingSteps, targetIndex) {
+  for (let i = 0; i < targetIndex; i += 1) {
+    if (parseStepDurationSeconds(cookingSteps[i]) >= LONG_TIMER_THRESHOLD_SECONDS) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function findEarliestCookingMentionIndex(ingredient, cookingSteps) {
+  const tokens = extractIngredientTokensForPrototype(ingredient);
+  if (tokens.length === 0) {
+    return -1;
+  }
+
+  for (let i = 0; i < cookingSteps.length; i += 1) {
+    const normalizedStep = normalizePrototypeText(cookingSteps[i]?.text || cookingSteps[i]);
+    if (tokens.some((token) => normalizedStep.includes(token))) {
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+function extractPrepClausesFromCookingStep(text) {
+  return splitPrototypeClauses(text)
+    .filter((clause) => isPrepLikeText(clause) && !isCookingLikeText(clause));
+}
+
+function classifyRecipeExecutionFlow(recipe) {
+  const prepRequirementsBeforeCooking = [];
+  const optionalPrepDuringLongTimers = [];
+  const cookingSteps = [];
+  const rawCookingSteps = Array.isArray(recipe?.cookingSteps) ? recipe.cookingSteps : [];
+  const rawPreparationSteps = Array.isArray(recipe?.preparationSteps) ? recipe.preparationSteps : [];
+
+  rawPreparationSteps.forEach((step) => {
+    if (step && !isCookingLikeText(step)) {
+      uniquePush(prepRequirementsBeforeCooking, String(step).trim());
+    }
+  });
+
+  rawCookingSteps.forEach((step, index) => {
+    const text = String(step?.text || step || "").trim();
+    if (!text) {
+      return;
+    }
+
+    const prepOnlyStep = isPrepLikeText(text) && !isCookingLikeText(text);
+    if (prepOnlyStep && hasLongTimerBeforeIndex(rawCookingSteps, index)) {
+      uniquePush(optionalPrepDuringLongTimers, text);
+      return;
+    }
+
+    extractPrepClausesFromCookingStep(text).forEach((clause) => {
+      uniquePush(prepRequirementsBeforeCooking, clause);
+    });
+
+    uniquePush(cookingSteps, text);
+  });
+
+  const ingredients = Array.isArray(recipe?.ingredients) ? recipe.ingredients : [];
+  ingredients.forEach((ingredient) => {
+    if (!ingredientHasPrepDescriptor(ingredient)) {
+      return;
+    }
+
+    if (/\boptional\b/i.test(ingredient) && findEarliestCookingMentionIndex(ingredient, rawCookingSteps) === -1) {
+      return;
+    }
+
+    const firstMentionIndex = findEarliestCookingMentionIndex(ingredient, rawCookingSteps);
+    if (firstMentionIndex > 1 && hasLongTimerBeforeIndex(rawCookingSteps, firstMentionIndex)) {
+      uniquePush(optionalPrepDuringLongTimers, ingredient);
+      return;
+    }
+
+    uniquePush(prepRequirementsBeforeCooking, ingredient);
+  });
+
+  return {
+    prepRequirementsBeforeCooking,
+    cookingSteps,
+    optionalPrepDuringLongTimers
+  };
+}
+
 function normalizeRecipeForGuidance(recipe) {
   const cloned = JSON.parse(JSON.stringify(recipe));
   cloned.preparationSteps = splitPreparationActions(cloned.preparationSteps || []);
+  cloned.executionFlowPrototype = classifyRecipeExecutionFlow(cloned);
   return cloned;
 }
+
+function getRecipeFlowPrototypeExamples() {
+  return RECIPE_FLOW_PROTOTYPE_EXAMPLES.map((recipe) => ({
+    title: recipe.title,
+    sourceUrl: recipe.sourceUrl,
+    classification: classifyRecipeExecutionFlow(recipe)
+  }));
+}
+
+window.classifyRecipeExecutionFlow = classifyRecipeExecutionFlow;
+window.getRecipeFlowPrototypeExamples = getRecipeFlowPrototypeExamples;
 
 function initializeIngredientChecklist(recipe) {
   const ingredients = Array.isArray(recipe?.ingredients) ? recipe.ingredients : [];
