@@ -88,7 +88,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v55"; 
+const BUILD_VERSION = "DEV BUILD: v56"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -2188,7 +2188,11 @@ function renderHome() {
 
   const screenshotHelper = document.createElement("p");
   screenshotHelper.className = "small screenshot-import-helper";
-  screenshotHelper.textContent = "Import from Instagram or another app";
+  screenshotHelper.textContent = "Import a screenshot or photo of a recipe";
+
+  const screenshotHint = document.createElement("p");
+  screenshotHint.className = "small screenshot-import-helper";
+  screenshotHint.textContent = "You can also photograph a recipe from a book";
 
   const screenshotInput = document.createElement("input");
   screenshotInput.type = "file";
@@ -2221,7 +2225,7 @@ function renderHome() {
   replaceScreenshotBtn.classList.add("homepage-reset-btn");
 
   screenshotReadyRow.append(screenshotReadyText, replaceScreenshotBtn);
-  screenshotCard.append(screenshotTitle, screenshotHelper, screenshotPanel, screenshotInput);
+  screenshotCard.append(screenshotTitle, screenshotHelper, screenshotHint, screenshotPanel, screenshotInput);
 
   const urlCard = createCard();
   urlCard.classList.add("home-input-card");
