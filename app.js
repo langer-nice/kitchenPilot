@@ -87,7 +87,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v54"; 
+const BUILD_VERSION = "DEV BUILD: v55"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -2147,10 +2147,31 @@ function createRecipeIcon(assetPath, label = "") {
   return recipeIcon;
 }
 
+async function ensureTesseractLoaded() {
+  if (window.Tesseract && typeof window.Tesseract.recognize === "function") {
+    return window.Tesseract;
+  }
+
+  throw new Error("OCR is unavailable right now. Please refresh and try again.");
+}
+
+async function extractTextFromImage(fileOrBlob) {
+  const Tesseract = await ensureTesseractLoaded();
+  const result = await Tesseract.recognize(fileOrBlob, "eng");
+  const extractedText = String(result?.data?.text || "").trim();
+
+  if (!extractedText) {
+    throw new Error("Could not read text from screenshot");
+  }
+
+  return extractedText;
+}
+
 function renderHome() {
   const screen = clearAndSetScreenTitle("KitchenPilot", "Hands-free cooking guide");
   screen.classList.add("home-screen");
   let isAnalyzing = false;
+  let isReadingScreenshot = false;
   let currentAnalysisController = null;
   let loadingOverlay = null;
   const devModeEnabled = getDevModeEnabled();
@@ -2178,6 +2199,11 @@ function renderHome() {
   textInput.placeholder = "Paste your recipe text here";
   textInput.value = appState.homeRecipeText || "";
   textInput.hidden = !appState.homeTextInputVisible;
+
+  const screenshotInput = document.createElement("input");
+  screenshotInput.type = "file";
+  screenshotInput.accept = "image/*";
+  screenshotInput.hidden = true;
 
   const textToggle = document.createElement("button");
   textToggle.type = "button";
@@ -2207,6 +2233,22 @@ function renderHome() {
   const actions = document.createElement("div");
   actions.className = "button-row";
 
+  const importActions = document.createElement("div");
+  importActions.className = "home-import-tools";
+
+  const screenshotBtn = createButton("📸 Use screenshot", "", () => {
+    if (isReadingScreenshot) {
+      return;
+    }
+    screenshotInput.click();
+  });
+  screenshotBtn.classList.add("screenshot-import-btn");
+
+  const screenshotHelper = document.createElement("p");
+  screenshotHelper.className = "small screenshot-import-helper";
+  screenshotHelper.textContent = "Use a screenshot from Instagram or another app";
+  importActions.append(screenshotBtn, screenshotHelper);
+
   function hideLoadingOverlay() {
     if (loadingOverlay) {
       loadingOverlay.remove();
@@ -2222,7 +2264,20 @@ function renderHome() {
     hideLoadingOverlay();
   }
 
-  function showLoadingOverlay() {
+  function resetScreenshotUi() {
+    isReadingScreenshot = false;
+    screenshotBtn.disabled = false;
+    hideLoadingOverlay();
+    screenshotInput.value = "";
+  }
+
+  function showLoadingOverlay(options = {}) {
+    const {
+      titleText = "Analyse de la recette...",
+      subtitleText = "Cela peut prendre quelques secondes.",
+      cancelLabel = "",
+      onCancel = null
+    } = options;
     hideLoadingOverlay();
 
     loadingOverlay = document.createElement("div");
@@ -2237,24 +2292,97 @@ function renderHome() {
 
     const title = document.createElement("p");
     title.className = "loading-title";
-    title.textContent = "Analyse de la recette...";
+    title.textContent = titleText;
 
     const subtitle = document.createElement("p");
     subtitle.className = "loading-subtitle";
-    subtitle.textContent = "Cela peut prendre quelques secondes.";
+    subtitle.textContent = subtitleText;
 
-    const cancelBtn = createButton("Annuler", "", () => {
-      if (currentAnalysisController) {
-        currentAnalysisController.abort();
-      }
-      resetAnalysisUi();
-    });
-    cancelBtn.classList.add("loading-cancel-btn");
-
-    panel.append(spinner, title, subtitle, cancelBtn);
+    panel.append(spinner, title, subtitle);
+    if (cancelLabel && typeof onCancel === "function") {
+      const cancelBtn = createButton(cancelLabel, "", () => {
+        onCancel();
+      });
+      cancelBtn.classList.add("loading-cancel-btn");
+      panel.appendChild(cancelBtn);
+    }
     loadingOverlay.appendChild(panel);
     screen.appendChild(loadingOverlay);
   }
+
+  function clearValidation() {
+    if (validation.hidden) {
+      return;
+    }
+    if (urlInput.value.trim() || textInput.value.trim()) {
+      appState.homeValidationMessage = "";
+      validation.hidden = true;
+      validation.textContent = "";
+    }
+  }
+
+  function populateRecipeTextFromScreenshot(text) {
+    appState.homeTextInputVisible = true;
+    syncTextInputVisibility();
+    appState.homeRecipeText = text;
+    textInput.value = text;
+    clearValidation();
+    textInput.focus();
+    textInput.setSelectionRange(textInput.value.length, textInput.value.length);
+  }
+
+  async function handleScreenshotSource(fileOrBlob) {
+    if (!fileOrBlob || isReadingScreenshot) {
+      return;
+    }
+
+    isReadingScreenshot = true;
+    screenshotBtn.disabled = true;
+    showLoadingOverlay({
+      titleText: "Reading recipe from screenshot...",
+      subtitleText: "This can take a few seconds."
+    });
+
+    try {
+      const extractedText = await extractTextFromImage(fileOrBlob);
+      populateRecipeTextFromScreenshot(extractedText);
+      resetScreenshotUi();
+    } catch (error) {
+      console.error("Screenshot OCR failed:", error);
+      appState.homeValidationMessage = "Could not read text from screenshot";
+      validation.textContent = appState.homeValidationMessage;
+      validation.hidden = false;
+      resetScreenshotUi();
+    }
+  }
+
+  screenshotInput.addEventListener("change", async () => {
+    const file = screenshotInput.files && screenshotInput.files[0];
+    if (!file) {
+      return;
+    }
+
+    await handleScreenshotSource(file);
+  });
+
+  const handleImagePaste = async (event) => {
+    const items = Array.from(event.clipboardData?.items || []);
+    const imageItem = items.find((item) => item.type && item.type.startsWith("image/"));
+    if (!imageItem) {
+      return;
+    }
+
+    event.preventDefault();
+    const imageBlob = imageItem.getAsFile();
+    if (!imageBlob) {
+      return;
+    }
+
+    await handleScreenshotSource(imageBlob);
+  };
+
+  urlInput.addEventListener("paste", handleImagePaste);
+  textInput.addEventListener("paste", handleImagePaste);
 
   const startBtn = createButton("Start Cooking", "primary", async () => {
     if (isAnalyzing) {
@@ -2282,7 +2410,17 @@ function renderHome() {
     startBtn.disabled = true;
     startBtn.textContent = "Analysing...";
     currentAnalysisController = typeof AbortController !== "undefined" ? new AbortController() : null;
-    showLoadingOverlay();
+    showLoadingOverlay({
+      titleText: "Analyse de la recette...",
+      subtitleText: "Cela peut prendre quelques secondes.",
+      cancelLabel: "Annuler",
+      onCancel: () => {
+        if (currentAnalysisController) {
+          currentAnalysisController.abort();
+        }
+        resetAnalysisUi();
+      }
+    });
 
     try {
       const parsedRecipe = await parseRecipeText(parseInput, {
@@ -2312,7 +2450,7 @@ function renderHome() {
   });
 
   actions.append(startBtn);
-  homeMain.append(actions, textToggle);
+  homeMain.append(importActions, actions, textToggle, screenshotInput);
 
   if (devModeEnabled) {
     const devToolsCard = createCard();
@@ -2392,17 +2530,6 @@ function renderHome() {
   devModeSwitch.append(devModeInput, devModeSlider);
   devModeRow.append(devModeLabel, devModeSwitch);
   screen.appendChild(devModeRow);
-
-  const clearValidation = () => {
-    if (validation.hidden) {
-      return;
-    }
-    if (urlInput.value.trim() || textInput.value.trim()) {
-      appState.homeValidationMessage = "";
-      validation.hidden = true;
-      validation.textContent = "";
-    }
-  };
 
   urlInput.addEventListener("input", () => {
     appState.homeRecipeUrl = urlInput.value;
