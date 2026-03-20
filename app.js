@@ -1,5 +1,5 @@
 const appState = {
-  currentScreen: "home",
+  currentScreen: "onboarding",
   recipe: null,
   homeActiveEntry: null,
   homeRecipeUrl: "",
@@ -39,6 +39,21 @@ const appState = {
 const appEl = document.getElementById("app");
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let voiceRecognition = null;
+let onboardingDemoIntervalId = null;
+
+const ONBOARDING_DEMO_STATES = [
+  "Screenshot imported ✓",
+  "Ingredients ready",
+  "Step 1: Chop the onions",
+  "Say 'Next' to continue"
+];
+
+function clearOnboardingDemoLoop() {
+  if (onboardingDemoIntervalId) {
+    window.clearInterval(onboardingDemoIntervalId);
+    onboardingDemoIntervalId = null;
+  }
+}
 
 const EXAMPLE_RECIPE_URL = "https://www.bbcgoodfood.com/recipes/spaghetti-aglio-e-olio";
 // Dev Mode switch:
@@ -500,6 +515,7 @@ function formatTime(totalSeconds) {
 function setScreen(screenName) {
   const previousScreen = appState.currentScreen;
   appState.currentScreen = screenName;
+  clearOnboardingDemoLoop();
   resetVoiceActivityState();
   clearDeferredPreparationSpeech();
 
@@ -523,6 +539,9 @@ function setScreen(screenName) {
   }
 
   switch (screenName) {
+    case "onboarding":
+      renderOnboarding();
+      break;
     case "home":
       renderHome();
       break;
@@ -2169,6 +2188,54 @@ async function extractTextFromImage(fileOrBlob) {
   return extractedText;
 }
 
+function renderOnboarding() {
+  const screen = clearAndSetScreenTitle("KitchenPilot", "Hands-free cooking guide");
+  screen.classList.add("onboarding-screen");
+
+  const main = document.createElement("div");
+  main.className = "onboarding-main";
+
+  const demoCard = createCard();
+  demoCard.classList.add("onboarding-demo-card");
+
+  const demoIcon = createRecipeIcon(COOKING_STAGE_ICON, "KitchenPilot");
+  demoIcon.classList.add("onboarding-demo-icon");
+
+  const demoStatus = document.createElement("p");
+  demoStatus.className = "onboarding-demo-status";
+  demoStatus.setAttribute("aria-live", "polite");
+  demoStatus.textContent = ONBOARDING_DEMO_STATES[0];
+
+  demoCard.append(demoIcon, demoStatus);
+
+  const actions = document.createElement("div");
+  actions.className = "onboarding-actions";
+
+  actions.append(
+    createButton("Start cooking", "primary primary-action", () => setScreen("home"), "start"),
+    createInlineButton("Skip", "onboarding-skip", () => setScreen("home"), "skip")
+  );
+
+  main.append(demoCard, actions);
+  screen.appendChild(main);
+
+  let currentStateIndex = 0;
+
+  function showDemoState(nextIndex) {
+    demoStatus.classList.add("is-transitioning");
+
+    window.setTimeout(() => {
+      currentStateIndex = nextIndex % ONBOARDING_DEMO_STATES.length;
+      demoStatus.textContent = ONBOARDING_DEMO_STATES[currentStateIndex];
+      demoStatus.classList.remove("is-transitioning");
+    }, 140);
+  }
+
+  onboardingDemoIntervalId = window.setInterval(() => {
+    showDemoState(currentStateIndex + 1);
+  }, 2000);
+}
+
 function renderHome() {
   const screen = clearAndSetScreenTitle("KitchenPilot", "Hands-free cooking guide");
   screen.classList.add("home-screen");
@@ -2195,11 +2262,7 @@ function renderHome() {
   heroImage.decoding = "async";
   heroIcon.appendChild(heroImage);
 
-  const heroTitle = document.createElement("p");
-  heroTitle.className = "home-hero-title";
-  heroTitle.textContent = "Let's get started";
-
-  hero.append(heroIcon, heroTitle);
+  hero.appendChild(heroIcon);
   homeMain.appendChild(hero);
 
   const entrySection = document.createElement("div");
@@ -3487,4 +3550,4 @@ window.addEventListener("kitchenpilot:voice-speech-end", () => {
   setVoiceOutputSpeaking(false);
 });
 
-setScreen("home");
+setScreen("onboarding");
