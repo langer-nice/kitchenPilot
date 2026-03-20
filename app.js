@@ -87,7 +87,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v52"; 
+const BUILD_VERSION = "DEV BUILD: v53"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -982,6 +982,8 @@ function createCompactVoiceStrip(options = {}) {
   voiceRow.className = "header-row row-2 voice-panel compact-voice";
   if (appState.voiceEnabled) {
     voiceRow.classList.add("voice-active");
+  } else {
+    voiceRow.classList.add("voice-off", "voice-panel--cta");
   }
   if (!animateListening) {
     voiceRow.classList.add("voice-panel--static");
@@ -995,8 +997,43 @@ function createCompactVoiceStrip(options = {}) {
   voiceIcon.setAttribute("aria-hidden", "true");
 
   const voiceText = document.createElement("span");
-  voiceText.textContent = showListeningText && appState.voiceListening ? "Voice listening" : "Voice";
+  voiceText.textContent = appState.voiceEnabled
+    ? (showListeningText && appState.voiceListening ? "Voice listening" : "Voice")
+    : "Enable voice control";
   voiceLabel.append(voiceIcon, voiceText);
+
+  const enableVoiceFromPanel = () => {
+    if (appState.voiceEnabled) {
+      return;
+    }
+
+    if (!appState.voiceUnlocked) {
+      unlockVoiceAssistant({
+        statusMessage: readyLabel,
+        enableHintMessage: hintMessage,
+        enableHintMs: hintMs
+      });
+      return;
+    }
+
+    setVoiceEnabled(true, {
+      hintMessage,
+      hintMs
+    });
+  };
+
+  if (!appState.voiceEnabled) {
+    voiceRow.setAttribute("role", "button");
+    voiceRow.setAttribute("tabindex", "0");
+    voiceRow.setAttribute("aria-label", "Enable voice control");
+    voiceRow.addEventListener("click", enableVoiceFromPanel);
+    voiceRow.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        enableVoiceFromPanel();
+      }
+    });
+  }
 
   const voiceSwitchLabel = document.createElement("label");
   voiceSwitchLabel.className = "mic-switch";
@@ -1017,6 +1054,9 @@ function createCompactVoiceStrip(options = {}) {
       hintMs
     });
   });
+  voiceSwitchLabel.addEventListener("click", (event) => {
+    event.stopPropagation();
+  });
 
   const slider = document.createElement("span");
   slider.className = "slider";
@@ -1033,6 +1073,9 @@ function createCompactVoiceStrip(options = {}) {
         enableHintMessage: hintMessage,
         enableHintMs: hintMs
       });
+    });
+    unlockBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
     });
     controls.appendChild(unlockBtn);
   } else if (showUnlockButton && appState.voiceUnlocked) {
@@ -1776,7 +1819,7 @@ function createVoiceIndicatorBar(targetScreen) {
   trigger.className = "voice-indicator-bar";
   const voiceStateClass = !appState.voiceEnabled ? "voice-off" : isVoiceUiActive() ? "voice-active" : "voice-idle";
   trigger.classList.add(voiceStateClass);
-  trigger.setAttribute("aria-label", "Open voice settings");
+  trigger.setAttribute("aria-label", !appState.voiceEnabled ? "Enable voice control" : "Open voice settings");
 
   const bars = document.createElement("div");
   bars.className = "voice-bars";
@@ -1788,7 +1831,42 @@ function createVoiceIndicatorBar(targetScreen) {
   }
 
   trigger.appendChild(bars);
+  if (!appState.voiceEnabled) {
+    const label = document.createElement("span");
+    label.className = "voice-indicator-text";
+    label.textContent = "Enable voice control";
+    trigger.appendChild(label);
+  }
   trigger.addEventListener("click", () => {
+    if (!appState.voiceEnabled) {
+      if (!appState.voiceUnlocked) {
+        unlockVoiceAssistant({
+          statusMessage: "Voice ready",
+          enableHintMessage: "Voice commands enabled. Say: Next, Repeat, Pause.",
+          enableHintMs: 2200
+        });
+      } else {
+        setVoiceEnabled(true, {
+          hintMessage: "Voice commands enabled. Say: Next, Repeat, Pause.",
+          hintMs: 2200
+        });
+      }
+
+      if (targetScreen === "cooking") {
+        renderCooking();
+      }
+      if (targetScreen === "timerActive") {
+        renderTimerActive();
+      }
+      if (targetScreen === "ingredients") {
+        renderIngredients();
+      }
+      if (targetScreen === "preparation") {
+        renderPreparation();
+      }
+      return;
+    }
+
     openVoiceSettingsModal(targetScreen);
   });
 
