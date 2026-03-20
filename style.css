@@ -178,14 +178,37 @@ h3 {
   gap: 12px;
 }
 
-.home-import-tools {
+.home-input-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.home-screenshot-state {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
+.home-screenshot-ready {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #c8d8cb;
+  border-radius: 12px;
+  background: #eef9f1;
+}
+
 .screenshot-import-btn {
   min-height: 52px;
+}
+
+.screenshot-ready-text {
+  color: #145f32;
+  font-weight: 700;
+  text-align: left;
 }
 
 .screenshot-import-helper {

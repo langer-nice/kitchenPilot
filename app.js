@@ -3,6 +3,7 @@ const appState = {
   recipe: null,
   homeRecipeUrl: "",
   homeRecipeText: "",
+  homeScreenshotText: "",
   homeTextInputVisible: false,
   homeValidationMessage: "",
   ingredientChecks: [],
@@ -2179,7 +2180,52 @@ function renderHome() {
   const homeMain = document.createElement("div");
   homeMain.className = "home-main";
 
-  const card = createCard();
+  const screenshotCard = createCard();
+  screenshotCard.classList.add("home-input-card");
+
+  const screenshotTitle = document.createElement("label");
+  screenshotTitle.textContent = "Use a screenshot";
+
+  const screenshotHelper = document.createElement("p");
+  screenshotHelper.className = "small screenshot-import-helper";
+  screenshotHelper.textContent = "Import from Instagram or another app";
+
+  const screenshotInput = document.createElement("input");
+  screenshotInput.type = "file";
+  screenshotInput.accept = "image/*";
+  screenshotInput.hidden = true;
+
+  const screenshotPanel = document.createElement("div");
+  screenshotPanel.className = "home-screenshot-state";
+
+  const screenshotBtn = createButton("Choose screenshot", "", () => {
+    if (isReadingScreenshot) {
+      return;
+    }
+    screenshotInput.click();
+  });
+  screenshotBtn.classList.add("screenshot-import-btn");
+
+  const screenshotReadyRow = document.createElement("div");
+  screenshotReadyRow.className = "home-screenshot-ready";
+
+  const screenshotReadyText = document.createElement("p");
+  screenshotReadyText.className = "small screenshot-ready-text";
+
+  const replaceScreenshotBtn = createButton("Replace", "inline-btn secondary", () => {
+    if (isReadingScreenshot) {
+      return;
+    }
+    screenshotInput.click();
+  });
+  replaceScreenshotBtn.classList.add("homepage-reset-btn");
+
+  screenshotReadyRow.append(screenshotReadyText, replaceScreenshotBtn);
+  screenshotCard.append(screenshotTitle, screenshotHelper, screenshotPanel, screenshotInput);
+
+  const urlCard = createCard();
+  urlCard.classList.add("home-input-card");
+
   const urlLabel = document.createElement("label");
   urlLabel.textContent = "Recipe URL";
   urlLabel.setAttribute("for", "recipeUrl");
@@ -2199,11 +2245,6 @@ function renderHome() {
   textInput.placeholder = "Paste your recipe text here";
   textInput.value = appState.homeRecipeText || "";
   textInput.hidden = !appState.homeTextInputVisible;
-
-  const screenshotInput = document.createElement("input");
-  screenshotInput.type = "file";
-  screenshotInput.accept = "image/*";
-  screenshotInput.hidden = true;
 
   const textToggle = document.createElement("button");
   textToggle.type = "button";
@@ -2227,27 +2268,11 @@ function renderHome() {
   validation.textContent = appState.homeValidationMessage || "";
 
   textLabel.hidden = !appState.homeTextInputVisible;
-  card.append(urlLabel, urlInput, textLabel, textInput, validation);
-  homeMain.appendChild(card);
+  urlCard.append(urlLabel, urlInput, textLabel, textInput, validation);
+  homeMain.append(screenshotCard, urlCard);
 
   const actions = document.createElement("div");
   actions.className = "button-row";
-
-  const importActions = document.createElement("div");
-  importActions.className = "home-import-tools";
-
-  const screenshotBtn = createButton("📸 Use screenshot", "", () => {
-    if (isReadingScreenshot) {
-      return;
-    }
-    screenshotInput.click();
-  });
-  screenshotBtn.classList.add("screenshot-import-btn");
-
-  const screenshotHelper = document.createElement("p");
-  screenshotHelper.className = "small screenshot-import-helper";
-  screenshotHelper.textContent = "Use a screenshot from Instagram or another app";
-  importActions.append(screenshotBtn, screenshotHelper);
 
   function hideLoadingOverlay() {
     if (loadingOverlay) {
@@ -2259,9 +2284,9 @@ function renderHome() {
   function resetAnalysisUi() {
     isAnalyzing = false;
     currentAnalysisController = null;
-    startBtn.disabled = false;
     startBtn.textContent = "Start Cooking";
     hideLoadingOverlay();
+    syncStartButtonState();
   }
 
   function resetScreenshotUi() {
@@ -2269,6 +2294,7 @@ function renderHome() {
     screenshotBtn.disabled = false;
     hideLoadingOverlay();
     screenshotInput.value = "";
+    syncStartButtonState();
   }
 
   function showLoadingOverlay(options = {}) {
@@ -2314,21 +2340,47 @@ function renderHome() {
     if (validation.hidden) {
       return;
     }
-    if (urlInput.value.trim() || textInput.value.trim()) {
+    if (urlInput.value.trim() || textInput.value.trim() || appState.homeScreenshotText.trim()) {
       appState.homeValidationMessage = "";
       validation.hidden = true;
       validation.textContent = "";
     }
   }
 
-  function populateRecipeTextFromScreenshot(text) {
-    appState.homeTextInputVisible = true;
-    syncTextInputVisibility();
-    appState.homeRecipeText = text;
-    textInput.value = text;
+  function syncScreenshotState() {
+    const hasScreenshot = Boolean(appState.homeScreenshotText.trim());
+    screenshotPanel.innerHTML = "";
+
+    if (hasScreenshot) {
+      screenshotReadyText.textContent = "Screenshot loaded ✓";
+      screenshotPanel.appendChild(screenshotReadyRow);
+    } else {
+      screenshotPanel.appendChild(screenshotBtn);
+    }
+  }
+
+  function hasHomeInput() {
+    return Boolean(
+      urlInput.value.trim() ||
+      textInput.value.trim() ||
+      appState.homeScreenshotText.trim()
+    );
+  }
+
+  function syncStartButtonState() {
+    if (isAnalyzing) {
+      startBtn.disabled = true;
+      return;
+    }
+
+    startBtn.disabled = !hasHomeInput() || isReadingScreenshot;
+  }
+
+  function storeScreenshotText(text) {
+    appState.homeScreenshotText = text;
     clearValidation();
-    textInput.focus();
-    textInput.setSelectionRange(textInput.value.length, textInput.value.length);
+    syncScreenshotState();
+    syncStartButtonState();
   }
 
   async function handleScreenshotSource(fileOrBlob) {
@@ -2345,7 +2397,7 @@ function renderHome() {
 
     try {
       const extractedText = await extractTextFromImage(fileOrBlob);
-      populateRecipeTextFromScreenshot(extractedText);
+      storeScreenshotText(extractedText);
       resetScreenshotUi();
     } catch (error) {
       console.error("Screenshot OCR failed:", error);
@@ -2393,10 +2445,11 @@ function renderHome() {
     appState.homeRecipeText = textInput.value;
     const recipeUrl = urlInput.value.trim();
     const recipeText = textInput.value.trim();
-    const parseInput = recipeText || recipeUrl;
+    const screenshotText = appState.homeScreenshotText.trim();
+    const parseInput = recipeText || screenshotText || recipeUrl;
 
     if (!parseInput) {
-      appState.homeValidationMessage = "Please paste a recipe URL or recipe text before continuing.";
+      appState.homeValidationMessage = "Please add a recipe URL, recipe text, or screenshot before continuing.";
       validation.textContent = appState.homeValidationMessage;
       validation.hidden = false;
       return;
@@ -2450,7 +2503,7 @@ function renderHome() {
   });
 
   actions.append(startBtn);
-  homeMain.append(importActions, actions, textToggle, screenshotInput);
+  homeMain.append(actions, textToggle);
 
   if (devModeEnabled) {
     const devToolsCard = createCard();
@@ -2469,8 +2522,12 @@ function renderHome() {
     const loadExampleUrlBtn = createButton("Load example URL", "", () => {
       appState.homeRecipeUrl = EXAMPLE_RECIPE_URL;
       appState.homeRecipeText = "";
+      appState.homeScreenshotText = "";
       urlInput.value = appState.homeRecipeUrl;
       textInput.value = appState.homeRecipeText;
+      textInput.scrollTop = 0;
+      syncScreenshotState();
+      syncStartButtonState();
       clearValidation();
     });
 
@@ -2478,9 +2535,13 @@ function renderHome() {
       appState.homeTextInputVisible = true;
       syncTextInputVisibility();
       appState.homeRecipeText = EXAMPLE_RECIPE_TEXT;
+      appState.homeScreenshotText = "";
       appState.homeRecipeUrl = "";
       textInput.value = appState.homeRecipeText;
+      textInput.scrollTop = 0;
       urlInput.value = appState.homeRecipeUrl;
+      syncScreenshotState();
+      syncStartButtonState();
       clearValidation();
     });
 
@@ -2534,12 +2595,16 @@ function renderHome() {
   urlInput.addEventListener("input", () => {
     appState.homeRecipeUrl = urlInput.value;
     clearValidation();
+    syncStartButtonState();
   });
   textInput.addEventListener("input", () => {
     appState.homeRecipeText = textInput.value;
     clearValidation();
+    syncStartButtonState();
   });
   syncTextInputVisibility();
+  syncScreenshotState();
+  syncStartButtonState();
 }
 
 function renderAnalysis() {
