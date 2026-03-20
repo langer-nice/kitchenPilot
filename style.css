@@ -385,23 +385,6 @@ button.danger,
   text-decoration: line-through;
 }
 
-.ingredient-status {
-  margin-top: 14px;
-  margin-bottom: 14px;
-}
-
-.ingredient-status.ingredients-ready {
-  background: #e7fff0;
-  border-color: #88d3a8;
-  color: #145f32;
-}
-
-.ingredient-status.ingredients-missing {
-  background: #fff4d9;
-  border-color: #f0ce74;
-  color: #704f00;
-}
-
 .instruction {
   font-size: 1.5rem;
   line-height: 1.4;

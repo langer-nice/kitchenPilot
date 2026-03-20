@@ -87,7 +87,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v50"; 
+const BUILD_VERSION = "DEV BUILD: v51"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -645,6 +645,69 @@ function uniquePush(target, value) {
   }
 }
 
+const INGREDIENT_PREP_PATTERNS = [
+  { match: /\bfinely chopped\b|\bchopped\b/i, action: "chop", label: "Chop" },
+  { match: /\bdiced\b/i, action: "dice", label: "Dice" },
+  { match: /\bthinly sliced\b|\bsliced\b/i, action: "slice", label: "Slice" },
+  { match: /\bminced\b/i, action: "mince", label: "Mince" },
+  { match: /\bgrated\b/i, action: "grate", label: "Grate" },
+  { match: /\bcrushed\b/i, action: "crush", label: "Crush" },
+  { match: /\bpeeled\b/i, action: "peel", label: "Peel" },
+  { match: /\btrimmed\b/i, action: "trim", label: "Trim" },
+  { match: /\bshredded\b/i, action: "shred", label: "Shred" }
+];
+
+function cleanIngredientNameForPrepTask(ingredientText) {
+  return String(ingredientText || "")
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\bfinely chopped\b|\bchopped\b|\bdiced\b|\bthinly sliced\b|\bsliced\b|\bminced\b|\bgrated\b|\bcrushed\b|\bpeeled\b|\btrimmed\b|\bshredded\b/gi, " ")
+    .replace(/\b(of|and|with|plus|optional|to taste|divided)\b/gi, " ")
+    .replace(/\b\d+(?:\/\d+)?(?:\.\d+)?\b/g, " ")
+    .replace(/\b(cups?|tablespoons?|tbsp|teaspoons?|tsp|grams?|g|kg|ml|l|oz|lb|lbs|cloves?|bulbs?|heads?)\b/gi, " ")
+    .replace(/[,-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractPrepTasksFromIngredients(ingredients) {
+  const tasks = [];
+  const seenTexts = new Set();
+
+  (Array.isArray(ingredients) ? ingredients : []).forEach((ingredientText) => {
+    const ingredient = String(ingredientText || "").trim();
+    if (!ingredient) {
+      return;
+    }
+
+    const prepPattern = INGREDIENT_PREP_PATTERNS.find(({ match }) => match.test(ingredient));
+    if (!prepPattern) {
+      return;
+    }
+
+    const cleanedIngredientName = cleanIngredientNameForPrepTask(ingredient);
+    if (!cleanedIngredientName) {
+      return;
+    }
+
+    const article = /^[aeiou]/i.test(cleanedIngredientName) ? "an" : "the";
+    const text = `${prepPattern.label} ${article} ${cleanedIngredientName}`.replace(/\s+/g, " ").trim();
+    if (seenTexts.has(text)) {
+      return;
+    }
+
+    seenTexts.add(text);
+    tasks.push({
+      ingredient: cleanedIngredientName,
+      action: prepPattern.action,
+      text
+    });
+  });
+
+  return {
+    prepTasksFromIngredients: tasks
+  };
+}
+
 function extractIngredientTokensForPrototype(ingredient) {
   const normalized = normalizePrototypeText(ingredient)
     .replace(/\b(optional|plus|divided|between|small|large|medium|fresh|ground|extra-virgin|well|crosswise|pieces|piece|pinch|cups?|tablespoons?|tbsp|teaspoons?|tsp|grams?|g|kg|ml|oz|lb|lbs)\b/g, " ")
@@ -753,6 +816,7 @@ function normalizeRecipeForGuidance(recipe) {
   const cloned = JSON.parse(JSON.stringify(recipe));
   cloned.preparationSteps = splitPreparationActions(cloned.preparationSteps || []);
   cloned.executionFlowPrototype = classifyRecipeExecutionFlow(cloned);
+  cloned.prepTaskPrototype = extractPrepTasksFromIngredients(cloned.ingredients || []);
   return cloned;
 }
 
@@ -760,12 +824,14 @@ function getRecipeFlowPrototypeExamples() {
   return RECIPE_FLOW_PROTOTYPE_EXAMPLES.map((recipe) => ({
     title: recipe.title,
     sourceUrl: recipe.sourceUrl,
-    classification: classifyRecipeExecutionFlow(recipe)
+    classification: classifyRecipeExecutionFlow(recipe),
+    prepTaskPrototype: extractPrepTasksFromIngredients(recipe.ingredients || [])
   }));
 }
 
 window.classifyRecipeExecutionFlow = classifyRecipeExecutionFlow;
 window.getRecipeFlowPrototypeExamples = getRecipeFlowPrototypeExamples;
+window.extractPrepTasksFromIngredients = extractPrepTasksFromIngredients;
 
 function initializeIngredientChecklist(recipe) {
   const ingredients = Array.isArray(recipe?.ingredients) ? recipe.ingredients : [];
@@ -2502,11 +2568,13 @@ function renderCookingIntro() {
   appEl.appendChild(screen);
 }
 
-function renderIngredients() {
+function renderIngredients(options = {}) {
   if (!appState.recipe) {
     setScreen("home");
     return;
   }
+
+  const { restoreScrollTop = null } = options;
 
   if (!Array.isArray(appState.ingredientChecks) || appState.ingredientChecks.length !== appState.recipe.ingredients.length) {
     initializeIngredientChecklist(appState.recipe);
@@ -2535,8 +2603,9 @@ function renderIngredients() {
     checkbox.checked = Boolean(appState.ingredientChecks[index]);
     checkbox.setAttribute("aria-label", ingredient);
     checkbox.addEventListener("change", () => {
+      const currentScrollTop = appEl.querySelector(".page-content")?.scrollTop ?? 0;
       setIngredientChecked(index, checkbox.checked);
-      renderIngredients();
+      renderIngredients({ restoreScrollTop: currentScrollTop });
     });
 
     const text = document.createElement("span");
@@ -2552,16 +2621,13 @@ function renderIngredients() {
     list.appendChild(li);
   });
 
-  const status = document.createElement("p");
-  status.className = `notice ingredient-status ${areAllIngredientsReady() ? "ingredients-ready" : "ingredients-missing"}`;
-  status.textContent = areAllIngredientsReady() ? "All ingredients ready" : "You are missing ingredients";
-
   const markAllBtn = createButton("Mark all as ready", "", () => {
+    const currentScrollTop = appEl.querySelector(".page-content")?.scrollTop ?? 0;
     appState.ingredientChecks = appState.recipe.ingredients.map(() => true);
-    renderIngredients();
+    renderIngredients({ restoreScrollTop: currentScrollTop });
   });
 
-  card.append(list, status, markAllBtn);
+  card.append(list, markAllBtn);
   content.appendChild(card);
 
   const actions = document.createElement("div");
@@ -2571,6 +2637,15 @@ function renderIngredients() {
     createButton("Ready", "primary", () => setScreen("preparationIntro"))
   );
   footer.appendChild(actions);
+
+  if (Number.isFinite(restoreScrollTop)) {
+    window.requestAnimationFrame(() => {
+      const pageContent = appEl.querySelector(".page-content");
+      if (pageContent) {
+        pageContent.scrollTop = restoreScrollTop;
+      }
+    });
+  }
 }
 
 function renderPreparation() {

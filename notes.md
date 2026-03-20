@@ -143,3 +143,8 @@ IMPORTANT RULES:
 
 # Apres
 Please focus on the Cooking Mode implementation and explain how it works in detail.
+
+NYT roast chicken reference: https://cooking.nytimes.com/recipes/1026751-ina-gartens-perfect-roast-chicken
+BBC Good Food quiche Lorraine: https://www.bbcgoodfood.com/recipes/ultimate-quiche-lorraine
+Love & Lemons minestrone: https://www.loveandlemons.com/minestrone-soup/
+Public roast chicken ingredient summary used to shape the prototype fixture: https://www.youtube.com/watch?v=cYa4Ha2OjoI
