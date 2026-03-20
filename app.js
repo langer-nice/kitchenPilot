@@ -1,6 +1,7 @@
 const appState = {
   currentScreen: "home",
   recipe: null,
+  homeActiveEntry: null,
   homeRecipeUrl: "",
   homeRecipeText: "",
   homeScreenshotText: "",
@@ -88,7 +89,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v56"; 
+const BUILD_VERSION = "DEV BUILD: v59"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -2180,100 +2181,122 @@ function renderHome() {
   const homeMain = document.createElement("div");
   homeMain.className = "home-main";
 
-  const screenshotCard = createCard();
-  screenshotCard.classList.add("home-input-card");
+  const hero = document.createElement("div");
+  hero.className = "home-hero";
 
-  const screenshotTitle = document.createElement("label");
-  screenshotTitle.textContent = "Use a screenshot";
+  const heroIcon = document.createElement("div");
+  heroIcon.className = "home-hero-icon";
+  heroIcon.setAttribute("aria-hidden", "true");
+
+  const heroImage = document.createElement("img");
+  heroImage.src = COOKING_STAGE_ICON;
+  heroImage.alt = "";
+  heroImage.loading = "eager";
+  heroImage.decoding = "async";
+  heroIcon.appendChild(heroImage);
+
+  const heroTitle = document.createElement("p");
+  heroTitle.className = "home-hero-title";
+  heroTitle.textContent = "Let's get started";
+
+  hero.append(heroIcon, heroTitle);
+  homeMain.appendChild(hero);
+
+  const entrySection = document.createElement("div");
+  entrySection.className = "home-entry-section";
+
+  function setEntryLabelContent(element, iconClassName, text) {
+    element.textContent = "";
+
+    const icon = document.createElement("i");
+    icon.className = `${iconClassName} home-entry-icon`;
+    icon.setAttribute("aria-hidden", "true");
+
+    const labelText = document.createElement("span");
+    labelText.textContent = text;
+
+    element.append(icon, labelText);
+  }
+
+  function ensureEntryExpanded(entryKey) {
+    if (appState.homeActiveEntry === entryKey) {
+      return;
+    }
+    appState.homeActiveEntry = entryKey;
+    renderHome();
+  }
+
+  const screenshotCard = createCard();
+  screenshotCard.classList.add("home-entry-card", "home-entry-card--interactive");
+  screenshotCard.setAttribute("role", "button");
+  screenshotCard.setAttribute("tabindex", "0");
+  screenshotCard.setAttribute("aria-label", "Upload a screenshot or photo");
+
+  const screenshotTitle = document.createElement("div");
+  screenshotTitle.className = "home-entry-label";
+  setEntryLabelContent(screenshotTitle, "fa-regular fa-image", "Upload a screenshot or photo");
 
   const screenshotHelper = document.createElement("p");
-  screenshotHelper.className = "small screenshot-import-helper";
-  screenshotHelper.textContent = "Import a screenshot or photo of a recipe";
-
-  const screenshotHint = document.createElement("p");
-  screenshotHint.className = "small screenshot-import-helper";
-  screenshotHint.textContent = "You can also photograph a recipe from a book";
+  screenshotHelper.className = "small home-entry-helper";
+  screenshotHelper.textContent = "From Instagram, books, or notes";
 
   const screenshotInput = document.createElement("input");
   screenshotInput.type = "file";
   screenshotInput.accept = "image/*";
   screenshotInput.hidden = true;
 
-  const screenshotPanel = document.createElement("div");
-  screenshotPanel.className = "home-screenshot-state";
-
-  const screenshotBtn = createButton("Choose screenshot", "", () => {
-    if (isReadingScreenshot) {
-      return;
-    }
-    screenshotInput.click();
-  });
-  screenshotBtn.classList.add("screenshot-import-btn");
-
-  const screenshotReadyRow = document.createElement("div");
-  screenshotReadyRow.className = "home-screenshot-ready";
-
-  const screenshotReadyText = document.createElement("p");
-  screenshotReadyText.className = "small screenshot-ready-text";
-
-  const replaceScreenshotBtn = createButton("Replace", "inline-btn secondary", () => {
-    if (isReadingScreenshot) {
-      return;
-    }
-    screenshotInput.click();
-  });
-  replaceScreenshotBtn.classList.add("homepage-reset-btn");
-
-  screenshotReadyRow.append(screenshotReadyText, replaceScreenshotBtn);
-  screenshotCard.append(screenshotTitle, screenshotHelper, screenshotHint, screenshotPanel, screenshotInput);
+  screenshotCard.append(screenshotTitle, screenshotHelper, screenshotInput);
+  entrySection.appendChild(screenshotCard);
 
   const urlCard = createCard();
-  urlCard.classList.add("home-input-card");
+  urlCard.classList.add("home-entry-card", "home-entry-card--interactive");
+  urlCard.setAttribute("role", "button");
+  urlCard.setAttribute("tabindex", "0");
+  urlCard.setAttribute("aria-label", "Paste a recipe link");
 
-  const urlLabel = document.createElement("label");
-  urlLabel.textContent = "Recipe URL";
-  urlLabel.setAttribute("for", "recipeUrl");
+  const urlTitle = document.createElement("div");
+  urlTitle.className = "home-entry-label";
+  setEntryLabelContent(urlTitle, "fa-solid fa-link", "Paste a recipe link");
+
+  const urlContent = document.createElement("div");
+  urlContent.className = "home-entry-content";
 
   const urlInput = document.createElement("input");
   urlInput.id = "recipeUrl";
   urlInput.placeholder = "Paste a recipe link";
   urlInput.type = "url";
   urlInput.value = appState.homeRecipeUrl || "";
+  urlContent.appendChild(urlInput);
+  urlCard.append(urlTitle, urlContent);
+  entrySection.appendChild(urlCard);
 
-  const textLabel = document.createElement("label");
-  textLabel.textContent = "Recipe Text";
-  textLabel.setAttribute("for", "recipeText");
+  const textCard = createCard();
+  textCard.classList.add("home-entry-card", "home-entry-card--interactive");
+  textCard.setAttribute("role", "button");
+  textCard.setAttribute("tabindex", "0");
+  textCard.setAttribute("aria-label", "Paste recipe text");
+
+  const textTitle = document.createElement("div");
+  textTitle.className = "home-entry-label";
+  setEntryLabelContent(textTitle, "fa-regular fa-file-lines", "Paste recipe text");
+
+  const textContent = document.createElement("div");
+  textContent.className = "home-entry-content";
 
   const textInput = document.createElement("textarea");
   textInput.id = "recipeText";
   textInput.placeholder = "Paste your recipe text here";
   textInput.value = appState.homeRecipeText || "";
-  textInput.hidden = !appState.homeTextInputVisible;
-
-  const textToggle = document.createElement("button");
-  textToggle.type = "button";
-  textToggle.className = "text-toggle-link";
-  textToggle.textContent = "Paste recipe text instead";
-
-  function syncTextInputVisibility() {
-    textInput.hidden = !appState.homeTextInputVisible;
-    textLabel.hidden = !appState.homeTextInputVisible;
-    textToggle.textContent = appState.homeTextInputVisible ? "Hide recipe text input" : "Paste recipe text instead";
-  }
-
-  textToggle.addEventListener("click", () => {
-    appState.homeTextInputVisible = !appState.homeTextInputVisible;
-    syncTextInputVisibility();
-  });
+  textContent.appendChild(textInput);
+  textCard.append(textTitle, textContent);
+  entrySection.appendChild(textCard);
 
   const validation = document.createElement("p");
   validation.className = "form-error";
   validation.hidden = !appState.homeValidationMessage;
   validation.textContent = appState.homeValidationMessage || "";
 
-  textLabel.hidden = !appState.homeTextInputVisible;
-  urlCard.append(urlLabel, urlInput, textLabel, textInput, validation);
-  homeMain.append(screenshotCard, urlCard);
+  homeMain.append(entrySection, validation);
 
   const actions = document.createElement("div");
   actions.className = "button-row";
@@ -2283,22 +2306,6 @@ function renderHome() {
       loadingOverlay.remove();
       loadingOverlay = null;
     }
-  }
-
-  function resetAnalysisUi() {
-    isAnalyzing = false;
-    currentAnalysisController = null;
-    startBtn.textContent = "Start Cooking";
-    hideLoadingOverlay();
-    syncStartButtonState();
-  }
-
-  function resetScreenshotUi() {
-    isReadingScreenshot = false;
-    screenshotBtn.disabled = false;
-    hideLoadingOverlay();
-    screenshotInput.value = "";
-    syncStartButtonState();
   }
 
   function showLoadingOverlay(options = {}) {
@@ -2336,6 +2343,7 @@ function renderHome() {
       cancelBtn.classList.add("loading-cancel-btn");
       panel.appendChild(cancelBtn);
     }
+
     loadingOverlay.appendChild(panel);
     screen.appendChild(loadingOverlay);
   }
@@ -2351,16 +2359,21 @@ function renderHome() {
     }
   }
 
-  function syncScreenshotState() {
-    const hasScreenshot = Boolean(appState.homeScreenshotText.trim());
-    screenshotPanel.innerHTML = "";
+  function syncEntryVisibility() {
+    const activeEntry = appState.homeActiveEntry;
+    urlCard.classList.toggle("is-expanded", activeEntry === "url");
+    textCard.classList.toggle("is-expanded", activeEntry === "text");
+    urlContent.hidden = activeEntry !== "url";
+    textContent.hidden = activeEntry !== "text";
+  }
 
-    if (hasScreenshot) {
-      screenshotReadyText.textContent = "Screenshot loaded ✓";
-      screenshotPanel.appendChild(screenshotReadyRow);
-    } else {
-      screenshotPanel.appendChild(screenshotBtn);
-    }
+  function syncScreenshotCardState() {
+    const hasScreenshot = Boolean(appState.homeScreenshotText.trim());
+    screenshotCard.classList.toggle("is-ready", hasScreenshot);
+    screenshotCard.classList.toggle("is-busy", isReadingScreenshot);
+    screenshotHelper.textContent = hasScreenshot
+      ? "Screenshot loaded ✓ Tap to replace"
+      : "From Instagram, books, or notes";
   }
 
   function hasHomeInput() {
@@ -2380,10 +2393,26 @@ function renderHome() {
     startBtn.disabled = !hasHomeInput() || isReadingScreenshot;
   }
 
+  function resetAnalysisUi() {
+    isAnalyzing = false;
+    currentAnalysisController = null;
+    startBtn.textContent = "Start Cooking";
+    hideLoadingOverlay();
+    syncStartButtonState();
+  }
+
+  function resetScreenshotUi() {
+    isReadingScreenshot = false;
+    hideLoadingOverlay();
+    screenshotInput.value = "";
+    syncScreenshotCardState();
+    syncStartButtonState();
+  }
+
   function storeScreenshotText(text) {
     appState.homeScreenshotText = text;
     clearValidation();
-    syncScreenshotState();
+    syncScreenshotCardState();
     syncStartButtonState();
   }
 
@@ -2393,7 +2422,8 @@ function renderHome() {
     }
 
     isReadingScreenshot = true;
-    screenshotBtn.disabled = true;
+    syncScreenshotCardState();
+    syncStartButtonState();
     showLoadingOverlay({
       titleText: "Reading recipe from screenshot...",
       subtitleText: "This can take a few seconds."
@@ -2419,6 +2449,64 @@ function renderHome() {
     }
 
     await handleScreenshotSource(file);
+  });
+
+  const openScreenshotPicker = () => {
+    if (isReadingScreenshot) {
+      return;
+    }
+    screenshotInput.click();
+  };
+
+  screenshotCard.addEventListener("click", () => {
+    openScreenshotPicker();
+  });
+  screenshotCard.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openScreenshotPicker();
+    }
+  });
+
+  const activateUrlCard = () => {
+    ensureEntryExpanded("url");
+    window.requestAnimationFrame(() => {
+      urlInput.focus();
+    });
+  };
+
+  urlCard.addEventListener("click", (event) => {
+    if (event.target === urlInput) {
+      return;
+    }
+    activateUrlCard();
+  });
+  urlCard.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      activateUrlCard();
+    }
+  });
+
+  const activateTextCard = () => {
+    ensureEntryExpanded("text");
+    window.requestAnimationFrame(() => {
+      textInput.focus();
+      textInput.scrollTop = 0;
+    });
+  };
+
+  textCard.addEventListener("click", (event) => {
+    if (event.target === textInput) {
+      return;
+    }
+    activateTextCard();
+  });
+  textCard.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      activateTextCard();
+    }
   });
 
   const handleImagePaste = async (event) => {
@@ -2506,8 +2594,8 @@ function renderHome() {
     }
   });
 
-  actions.append(startBtn);
-  homeMain.append(actions, textToggle);
+  actions.appendChild(startBtn);
+  homeMain.appendChild(actions);
 
   if (devModeEnabled) {
     const devToolsCard = createCard();
@@ -2524,27 +2612,29 @@ function renderHome() {
     exampleActions.className = "button-row";
 
     const loadExampleUrlBtn = createButton("Load example URL", "", () => {
+      appState.homeActiveEntry = "url";
       appState.homeRecipeUrl = EXAMPLE_RECIPE_URL;
       appState.homeRecipeText = "";
       appState.homeScreenshotText = "";
       urlInput.value = appState.homeRecipeUrl;
       textInput.value = appState.homeRecipeText;
       textInput.scrollTop = 0;
-      syncScreenshotState();
+      syncEntryVisibility();
+      syncScreenshotCardState();
       syncStartButtonState();
       clearValidation();
     });
 
     const loadExampleTextBtn = createButton(EXAMPLE_RECIPE_BUTTON_LABEL, "", () => {
-      appState.homeTextInputVisible = true;
-      syncTextInputVisibility();
+      appState.homeActiveEntry = "text";
       appState.homeRecipeText = EXAMPLE_RECIPE_TEXT;
       appState.homeScreenshotText = "";
       appState.homeRecipeUrl = "";
       textInput.value = appState.homeRecipeText;
       textInput.scrollTop = 0;
       urlInput.value = appState.homeRecipeUrl;
-      syncScreenshotState();
+      syncEntryVisibility();
+      syncScreenshotCardState();
       syncStartButtonState();
       clearValidation();
     });
@@ -2597,17 +2687,34 @@ function renderHome() {
   screen.appendChild(devModeRow);
 
   urlInput.addEventListener("input", () => {
+    if (appState.homeActiveEntry !== "url") {
+      appState.homeActiveEntry = "url";
+    }
     appState.homeRecipeUrl = urlInput.value;
     clearValidation();
     syncStartButtonState();
   });
+
   textInput.addEventListener("input", () => {
+    if (appState.homeActiveEntry !== "text") {
+      appState.homeActiveEntry = "text";
+    }
     appState.homeRecipeText = textInput.value;
+    textInput.scrollTop = 0;
     clearValidation();
     syncStartButtonState();
   });
-  syncTextInputVisibility();
-  syncScreenshotState();
+
+  if (!appState.homeActiveEntry) {
+    if (appState.homeRecipeText.trim()) {
+      appState.homeActiveEntry = "text";
+    } else if (appState.homeRecipeUrl.trim()) {
+      appState.homeActiveEntry = "url";
+    }
+  }
+
+  syncEntryVisibility();
+  syncScreenshotCardState();
   syncStartButtonState();
 }
 
