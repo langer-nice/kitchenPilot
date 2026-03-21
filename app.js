@@ -28,6 +28,9 @@ const appState = {
   voiceLastTranscript: "",
   voiceLastMatchedCommand: "",
   voiceLastAction: "",
+  voiceScreenEnteredAt: 0,
+  voicePreparationStepEnteredAt: 0,
+  voicePreparationAcceptCommandsAt: 0,
   voiceCommandLockUntil: 0,
   voiceCommandLockReason: "",
   voiceDebugEvents: [],
@@ -116,7 +119,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v69"; 
+const BUILD_VERSION = "DEV BUILD: v70"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -439,6 +442,17 @@ function isVoiceDebugUiEnabled() {
   return getDevModeEnabled();
 }
 
+function isPreparationVoiceScreen(screenName = appState.currentScreen) {
+  return screenName === "preparation";
+}
+
+function recordPreparationVoiceDebugEvent(type, payload = {}) {
+  if (!isPreparationVoiceScreen(payload.screen || appState.currentScreen)) {
+    return;
+  }
+  recordVoiceDebugEvent(type, payload);
+}
+
 function normalizeVoiceCommandText(text) {
   return String(text || "")
     .toLowerCase()
@@ -519,6 +533,36 @@ function logVoiceTranscriptArrival(transcript, options = {}) {
     source: options.source || "unknown",
     isFinal: Boolean(options.isFinal)
   };
+}
+
+function shouldIgnorePreparationTranscript(transcript, timing = {}) {
+  if (!isPreparationVoiceScreen()) {
+    return null;
+  }
+
+  const now = Number.isFinite(timing.transcriptReceivedAt) ? timing.transcriptReceivedAt : getVoiceTimestamp();
+  const gateUntil = Number(appState.voicePreparationAcceptCommandsAt || 0);
+
+  if (appState.voiceOutputSpeaking) {
+    recordPreparationVoiceDebugEvent("transcript-ignored-app-speech", {
+      transcript,
+      source: timing.source || "unknown",
+      isFinal: Boolean(timing.isFinal)
+    });
+    return "app-speech";
+  }
+
+  if (gateUntil && now < gateUntil) {
+    recordPreparationVoiceDebugEvent("transcript-ignored-stale", {
+      transcript,
+      source: timing.source || "unknown",
+      isFinal: Boolean(timing.isFinal),
+      ignoredUntilMs: roundVoiceTiming(gateUntil - now)
+    });
+    return "stale";
+  }
+
+  return null;
 }
 
 function logVoiceCommandMatch(commandKey, transcript, timing = {}) {
@@ -877,10 +921,19 @@ function getRecipeMetadataDebugSnapshot(recipe) {
 function setScreen(screenName) {
   const previousScreen = appState.currentScreen;
   const timerBefore = getVoiceTimerSnapshot();
+  const enteredAt = getVoiceTimestamp();
   appState.currentScreen = screenName;
+  appState.voiceScreenEnteredAt = enteredAt;
+  appState.voiceLastTranscript = "";
+  appState.voiceLastMatchedCommand = "";
+  appState.voiceLastAction = "";
   clearOnboardingDemoLoop();
   resetVoiceActivityState();
   clearDeferredPreparationSpeech();
+  if (screenName !== "preparation") {
+    appState.voicePreparationStepEnteredAt = 0;
+    appState.voicePreparationAcceptCommandsAt = 0;
+  }
   recordVoiceDebugEvent("screen-change", {
     previousScreen,
     nextScreen: screenName,
@@ -1895,6 +1948,12 @@ function handleVoiceCommand(commandText, options = {}) {
       commandLockReason: appState.voiceCommandLockReason || "",
       commandLockRemainingMs: getVoiceCommandLockRemainingMs()
     });
+    recordPreparationVoiceDebugEvent("command-ignored-lock", {
+      transcript: commandText,
+      matchedCommand: options.commandKey || "",
+      commandLockReason: appState.voiceCommandLockReason || "",
+      commandLockRemainingMs: getVoiceCommandLockRemainingMs()
+    });
     return;
   }
 
@@ -2298,6 +2357,11 @@ function startVoiceCommands() {
         isFinal: latestIsFinal
       });
 
+      const ignoredPreparationReason = shouldIgnorePreparationTranscript(latestTranscript, transcriptTiming);
+      if (ignoredPreparationReason) {
+        return;
+      }
+
       appState.voiceHeard = latestTranscript;
       pulseVoiceRecognitionActivity();
       const heardLabel = latestTranscript.length > 26 ? `${latestTranscript.slice(0, 26)}...` : latestTranscript;
@@ -2329,6 +2393,9 @@ function startVoiceCommands() {
       logVoiceTiming("recognition-started", {
         screen: appState.currentScreen
       });
+      recordPreparationVoiceDebugEvent("recognition-start", {
+        screen: appState.currentScreen
+      });
       appState.voiceListening = true;
       appState.voiceUserSpeaking = false;
       setVoiceCommandStatus("Listening...", 0);
@@ -2352,6 +2419,10 @@ function startVoiceCommands() {
       logVoiceTiming("recognition-ended", {
         voiceEnabled: appState.voiceEnabled,
         screen: appState.currentScreen
+      });
+      recordPreparationVoiceDebugEvent("recognition-end", {
+        screen: appState.currentScreen,
+        voiceEnabled: appState.voiceEnabled
       });
       appState.voiceListening = false;
       clearVoiceRecognitionActivity();
@@ -3876,6 +3947,8 @@ function renderPreparation() {
   ));
 
   if (appState.lastSpokenPreparationIndex !== idx) {
+    appState.voicePreparationStepEnteredAt = getVoiceTimestamp();
+    appState.voicePreparationAcceptCommandsAt = Number.POSITIVE_INFINITY;
     appState.lastSpokenPreparationIndex = idx;
     speak(currentText);
   }
@@ -4301,10 +4374,26 @@ window.addEventListener("keydown", (event) => {
 });
 
 window.addEventListener("kitchenpilot:voice-speech-start", () => {
+  if (isPreparationVoiceScreen()) {
+    appState.voicePreparationAcceptCommandsAt = Number.POSITIVE_INFINITY;
+    recordPreparationVoiceDebugEvent("app-speech-start", {
+      screen: appState.currentScreen,
+      preparationIndex: appState.preparationIndex
+    });
+  }
   setVoiceOutputSpeaking(true);
 });
 
 window.addEventListener("kitchenpilot:voice-speech-end", () => {
+  if (isPreparationVoiceScreen()) {
+    const now = getVoiceTimestamp();
+    appState.voicePreparationAcceptCommandsAt = now + 450;
+    recordPreparationVoiceDebugEvent("app-speech-end", {
+      screen: appState.currentScreen,
+      preparationIndex: appState.preparationIndex,
+      commandsAcceptedAfterMs: 450
+    });
+  }
   setVoiceOutputSpeaking(false);
 });
 
