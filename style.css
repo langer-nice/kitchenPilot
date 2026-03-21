@@ -218,6 +218,30 @@ body {
   text-align: center;
 }
 
+.voice-debug-panel {
+  margin-top: var(--space-3);
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #f3f6fb;
+  text-align: left;
+}
+
+.voice-debug-panel__title {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.voice-debug-panel__body {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--color-text-secondary);
+}
+
 .page-content {
   flex: 1 1 auto;
   min-height: 0;

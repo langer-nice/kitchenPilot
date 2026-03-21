@@ -25,6 +25,12 @@ const appState = {
   voiceExecuting: false,
   voiceCommandStatus: "",
   voiceCommandStatusTimeoutId: null,
+  voiceLastTranscript: "",
+  voiceLastMatchedCommand: "",
+  voiceLastAction: "",
+  voiceCommandLockUntil: 0,
+  voiceCommandLockReason: "",
+  voiceDebugEvents: [],
   lastSpokenPreparationIndex: null,
   lastSpokenCookingIndex: null,
   voiceHintMessage: "",
@@ -362,6 +368,73 @@ function logVoiceTiming(stage, details = {}) {
   });
 }
 
+function getVoiceTimerSnapshot() {
+  return {
+    timerStatus: appState.timerStatus,
+    activeTimerSeconds: appState.activeTimerSeconds,
+    timerPaused: appState.timerPaused,
+    timerSkippedStepIndex: appState.timerSkippedStepIndex
+  };
+}
+
+function isVoiceCommandLocked() {
+  const now = getVoiceTimestamp();
+  if (Number(appState.voiceCommandLockUntil || 0) <= now) {
+    appState.voiceCommandLockUntil = 0;
+    appState.voiceCommandLockReason = "";
+    return false;
+  }
+  return true;
+}
+
+function getVoiceCommandLockRemainingMs() {
+  if (!isVoiceCommandLocked()) {
+    return 0;
+  }
+  return Math.max(0, roundVoiceTiming(appState.voiceCommandLockUntil - getVoiceTimestamp()));
+}
+
+function recordVoiceDebugEvent(type, payload = {}) {
+  const entry = {
+    type,
+    timestamp: new Date().toISOString(),
+    screen: appState.currentScreen,
+    preparationIndex: appState.preparationIndex,
+    cookingIndex: appState.cookingIndex,
+    transcript: appState.voiceLastTranscript || appState.voiceHeard || "",
+    matchedCommand: appState.voiceLastMatchedCommand || "",
+    action: appState.voiceLastAction || "",
+    timer: getVoiceTimerSnapshot(),
+    commandLockActive: isVoiceCommandLocked(),
+    commandLockReason: appState.voiceCommandLockReason || "",
+    ...payload
+  };
+
+  appState.voiceDebugEvents = [entry, ...(appState.voiceDebugEvents || [])].slice(0, 8);
+  console.log("[voice-debug]", entry);
+}
+
+function setVoiceCommandLock(reason, durationMs = 650) {
+  appState.voiceCommandLockUntil = getVoiceTimestamp() + durationMs;
+  appState.voiceCommandLockReason = reason || "voice-command";
+  recordVoiceDebugEvent("command-lock-set", {
+    reason: appState.voiceCommandLockReason,
+    durationMs
+  });
+}
+
+function clearVoiceCommandLock(reason = "") {
+  if (!appState.voiceCommandLockUntil && !appState.voiceCommandLockReason) {
+    return;
+  }
+
+  appState.voiceCommandLockUntil = 0;
+  appState.voiceCommandLockReason = "";
+  recordVoiceDebugEvent("command-lock-cleared", {
+    reason: reason || "cleared"
+  });
+}
+
 function normalizeVoiceCommandText(text) {
   return String(text || "")
     .toLowerCase()
@@ -421,8 +494,15 @@ function logVoiceTranscriptArrival(transcript, options = {}) {
   const speechEndToTranscriptMs = Number.isFinite(lastVoiceSpeechEndAt)
     ? now - lastVoiceSpeechEndAt
     : null;
+  appState.voiceLastTranscript = transcript;
 
   logVoiceTiming("transcript-received", {
+    transcript,
+    source: options.source || "unknown",
+    isFinal: Boolean(options.isFinal),
+    speechEndToTranscriptMs: roundVoiceTiming(speechEndToTranscriptMs)
+  });
+  recordVoiceDebugEvent("transcript-received", {
     transcript,
     source: options.source || "unknown",
     isFinal: Boolean(options.isFinal),
@@ -442,10 +522,18 @@ function logVoiceCommandMatch(commandKey, transcript, timing = {}) {
   const transcriptToMatchMs = Number.isFinite(timing.transcriptReceivedAt)
     ? now - timing.transcriptReceivedAt
     : null;
+  appState.voiceLastMatchedCommand = commandKey;
 
   logVoiceTiming("command-matched", {
     commandKey,
     transcript,
+    source: timing.source || "unknown",
+    isFinal: Boolean(timing.isFinal),
+    transcriptToMatchMs: roundVoiceTiming(transcriptToMatchMs)
+  });
+  recordVoiceDebugEvent("command-matched", {
+    transcript,
+    matchedCommand: commandKey,
     source: timing.source || "unknown",
     isFinal: Boolean(timing.isFinal),
     transcriptToMatchMs: roundVoiceTiming(transcriptToMatchMs)
@@ -604,10 +692,13 @@ function runVoiceAction(actionName, commandLabel, action, delayMs = 0, timing = 
     markVoiceCommandExecuted(commandLabel);
   }
   const executeAction = () => {
+    const screenBefore = appState.currentScreen;
+    const timerBefore = getVoiceTimerSnapshot();
     const now = getVoiceTimestamp();
     const matchToActionMs = Number.isFinite(timing?.matchedAt)
       ? now - timing.matchedAt
       : null;
+    appState.voiceLastAction = actionName || commandLabel || "unknown";
 
     logVoiceTiming("action-executed", {
       commandKey: timing?.commandKey || actionName || commandLabel || "unknown",
@@ -615,8 +706,26 @@ function runVoiceAction(actionName, commandLabel, action, delayMs = 0, timing = 
       commandLabel: commandLabel || "",
       matchToActionMs: roundVoiceTiming(matchToActionMs)
     });
+    recordVoiceDebugEvent("action-before", {
+      transcript: appState.voiceLastTranscript || "",
+      matchedCommand: timing?.commandKey || "",
+      action: actionName || commandLabel || "unknown",
+      screenBefore,
+      timerBefore,
+      matchToActionMs: roundVoiceTiming(matchToActionMs)
+    });
 
     action();
+
+    recordVoiceDebugEvent("action-after", {
+      transcript: appState.voiceLastTranscript || "",
+      matchedCommand: timing?.commandKey || "",
+      action: actionName || commandLabel || "unknown",
+      screenBefore,
+      screenAfter: appState.currentScreen,
+      timerBefore,
+      timerAfter: getVoiceTimerSnapshot()
+    });
   };
 
   if (delayMs > 0) {
@@ -763,10 +872,17 @@ function getRecipeMetadataDebugSnapshot(recipe) {
 
 function setScreen(screenName) {
   const previousScreen = appState.currentScreen;
+  const timerBefore = getVoiceTimerSnapshot();
   appState.currentScreen = screenName;
   clearOnboardingDemoLoop();
   resetVoiceActivityState();
   clearDeferredPreparationSpeech();
+  recordVoiceDebugEvent("screen-change", {
+    previousScreen,
+    nextScreen: screenName,
+    timerBefore,
+    timerAfter: getVoiceTimerSnapshot()
+  });
 
   if (previousScreen === "preparation" && screenName !== "preparation") {
     appState.lastSpokenPreparationIndex = null;
@@ -1716,6 +1832,17 @@ function handleVoiceCommand(commandText, options = {}) {
     commandKey: options.commandKey || null,
     matchedAt: null
   };
+
+  if (isVoiceCommandLocked()) {
+    recordVoiceDebugEvent("command-ignored-lock", {
+      transcript: commandText,
+      matchedCommand: options.commandKey || "",
+      commandLockReason: appState.voiceCommandLockReason || "",
+      commandLockRemainingMs: getVoiceCommandLockRemainingMs()
+    });
+    return;
+  }
+
   setVoiceCommandStatus("Processing voice command...", 700);
 
   function matchCommand(commandKey) {
@@ -1727,6 +1854,7 @@ function handleVoiceCommand(commandText, options = {}) {
   if (appState.currentScreen === "ingredientsIntro") {
     if (command.includes("next") || command.includes("continue") || command.includes("start")) {
       matchCommand("next");
+      setVoiceCommandLock("ingredientsIntro:continue");
       runVoiceAction("next", "Continue", () => {
         setScreen("ingredients");
       }, 0, timing);
@@ -1735,6 +1863,7 @@ function handleVoiceCommand(commandText, options = {}) {
 
     if (command.includes("back")) {
       matchCommand("back");
+      setVoiceCommandLock("ingredientsIntro:back");
       runVoiceAction("back", "Back", () => {
         setScreen("analysis");
       }, 0, timing);
@@ -1745,6 +1874,7 @@ function handleVoiceCommand(commandText, options = {}) {
   if (appState.currentScreen === "preparationIntro") {
     if (command.includes("next") || command.includes("continue") || command.includes("start")) {
       matchCommand("next");
+      setVoiceCommandLock("preparationIntro:continue");
       runVoiceAction("next", "Continue", () => {
         startPreparationFlow();
       }, 0, timing);
@@ -1753,6 +1883,7 @@ function handleVoiceCommand(commandText, options = {}) {
 
     if (command.includes("back")) {
       matchCommand("back");
+      setVoiceCommandLock("preparationIntro:back");
       runVoiceAction("back", "Back", () => {
         setScreen("ingredients");
       }, 0, timing);
@@ -1764,8 +1895,18 @@ function handleVoiceCommand(commandText, options = {}) {
     const ingredientIndex = findIngredientIndexFromVoice(command);
     if (ingredientIndex >= 0) {
       matchCommand("check_ingredient");
+      const screenBefore = appState.currentScreen;
+      const timerBefore = getVoiceTimerSnapshot();
       highlightVoiceIngredient(ingredientIndex);
       markVoiceCommandExecuted("Check Ingredient");
+      appState.voiceLastAction = "check-ingredient";
+      recordVoiceDebugEvent("action-before", {
+        transcript: commandText,
+        matchedCommand: "check_ingredient",
+        action: "check-ingredient",
+        screenBefore,
+        timerBefore
+      });
       window.setTimeout(() => {
         logVoiceTiming("action-executed", {
           commandKey: "check_ingredient",
@@ -1776,12 +1917,22 @@ function handleVoiceCommand(commandText, options = {}) {
         setIngredientChecked(ingredientIndex, true);
         clearVoiceIngredientHighlight();
         renderIngredients();
+        recordVoiceDebugEvent("action-after", {
+          transcript: commandText,
+          matchedCommand: "check_ingredient",
+          action: "check-ingredient",
+          screenBefore,
+          screenAfter: appState.currentScreen,
+          timerBefore,
+          timerAfter: getVoiceTimerSnapshot()
+        });
       }, 140);
       return;
     }
 
     if (command.includes("next") || command.includes("ready") || command.includes("continue")) {
       matchCommand("next");
+      setVoiceCommandLock("ingredients:ready");
       runVoiceAction("next", "Ready", () => {
         setScreen("preparationIntro");
       }, 0, timing);
@@ -1790,6 +1941,7 @@ function handleVoiceCommand(commandText, options = {}) {
 
     if (command.includes("back")) {
       matchCommand("back");
+      setVoiceCommandLock("ingredients:back");
       runVoiceAction("back", "Back", () => {
         setScreen("ingredientsIntro");
       }, 0, timing);
@@ -1802,6 +1954,7 @@ function handleVoiceCommand(commandText, options = {}) {
   if (command.includes("next")) {
     if (appState.currentScreen === "preparation") {
       matchCommand("next");
+      setVoiceCommandLock("preparation:next");
       runVoiceAction("next", "Next", () => {
         advancePreparationStep();
       }, 0, timing);
@@ -1817,6 +1970,7 @@ function handleVoiceCommand(commandText, options = {}) {
     }
 
     matchCommand("next");
+    setVoiceCommandLock("cooking:next");
     runVoiceAction("next", "Next", () => {
       goToNextCookingStep();
     }, 0, timing);
@@ -1826,6 +1980,7 @@ function handleVoiceCommand(commandText, options = {}) {
   if (command.includes("previous") || command.includes("back")) {
     if (appState.currentScreen === "cookingIntro") {
       matchCommand("back");
+      setVoiceCommandLock("cookingIntro:back");
       runVoiceAction("back", "Back", () => {
         openPreparationIntro();
       }, 0, timing);
@@ -1834,6 +1989,7 @@ function handleVoiceCommand(commandText, options = {}) {
 
     if (appState.currentScreen === "preparation") {
       matchCommand("back");
+      setVoiceCommandLock("preparation:back");
       runVoiceAction("back", "Back", () => {
         goBackPreparationStep();
       }, 0, timing);
@@ -1841,6 +1997,7 @@ function handleVoiceCommand(commandText, options = {}) {
     }
 
     matchCommand("back");
+    setVoiceCommandLock("cooking:back");
     runVoiceAction("back", "Back", () => {
       goToPreviousCookingStep();
     }, 0, timing);
@@ -1876,6 +2033,7 @@ function handleVoiceCommand(commandText, options = {}) {
 
   if (appState.currentScreen === "cookingIntro" && command.includes("start") && command.includes("cook")) {
     matchCommand("start_cooking");
+    setVoiceCommandLock("cookingIntro:start");
     runVoiceAction("next", "Start Cooking", () => {
       setScreen("cooking");
     }, 0, timing);
@@ -1931,6 +2089,16 @@ function handleVoiceCommand(commandText, options = {}) {
     }
 
     matchCommand("start_timer");
+    const screenBefore = appState.currentScreen;
+    const timerBefore = getVoiceTimerSnapshot();
+    appState.voiceLastAction = "start-timer";
+    recordVoiceDebugEvent("action-before", {
+      transcript: commandText,
+      matchedCommand: "start_timer",
+      action: "start-timer",
+      screenBefore,
+      timerBefore
+    });
     if (appState.timerStatus === "paused") {
       resumeTimer();
       appState.timerPaused = false;
@@ -1952,11 +2120,21 @@ function handleVoiceCommand(commandText, options = {}) {
     if (appState.currentScreen === "timerActive") {
       renderTimerActive();
     }
+    recordVoiceDebugEvent("action-after", {
+      transcript: commandText,
+      matchedCommand: "start_timer",
+      action: "start-timer",
+      screenBefore,
+      screenAfter: appState.currentScreen,
+      timerBefore,
+      timerAfter: getVoiceTimerSnapshot()
+    });
     return;
   }
 
   if (command.includes("stop")) {
     matchCommand("stop");
+    setVoiceCommandLock("stop");
     runVoiceAction("stop", "Stop", () => {
       stopCookingFlow();
     }, 0, timing);
@@ -1965,6 +2143,7 @@ function handleVoiceCommand(commandText, options = {}) {
 
   if (command.includes("skip") && command.includes("timer")) {
     matchCommand("skip_timer");
+    setVoiceCommandLock("timer:skip");
     runVoiceAction("skip-timer", "Skip Timer", () => {
       skipTimerAndAdvance();
     }, 0, timing);
@@ -1972,6 +2151,9 @@ function handleVoiceCommand(commandText, options = {}) {
   }
 
   if (appState.voiceListening) {
+    recordVoiceDebugEvent("command-no-match", {
+      transcript: commandText
+    });
     setVoiceCommandStatus("Listening...", 0);
     renderCurrentVoiceScreen();
   }
@@ -2143,6 +2325,7 @@ function stopVoiceCommands() {
   appState.voiceErrorMessage = "";
   appState.voiceExecuting = false;
   appState.voiceHeard = "";
+  clearVoiceCommandLock("voice-stopped");
   setVoiceCommandStatus("", 0);
   if (voiceRecognition) {
     try {
@@ -2506,6 +2689,10 @@ function createPageShell(screenClassName = "") {
   page.append(header, content, footer);
   appEl.appendChild(page);
 
+  if (DEV_MODE) {
+    content.appendChild(createVoiceDebugPanel());
+  }
+
   return { page, header, content, footer };
 }
 
@@ -2524,6 +2711,34 @@ function createTitledPage(title, subtitle, screenClassName = "") {
   }
 
   return shell;
+}
+
+function createVoiceDebugPanel() {
+  const panel = document.createElement("section");
+  panel.className = "voice-debug-panel";
+
+  const title = document.createElement("h3");
+  title.className = "voice-debug-panel__title";
+  title.textContent = "Voice Debug";
+
+  const body = document.createElement("pre");
+  body.className = "voice-debug-panel__body";
+  body.textContent = JSON.stringify({
+    screen: appState.currentScreen,
+    transcript: appState.voiceLastTranscript || appState.voiceHeard || "",
+    matchedCommand: appState.voiceLastMatchedCommand || "",
+    lastAction: appState.voiceLastAction || "",
+    preparationIndex: appState.preparationIndex,
+    cookingIndex: appState.cookingIndex,
+    timer: getVoiceTimerSnapshot(),
+    commandLockActive: isVoiceCommandLocked(),
+    commandLockReason: appState.voiceCommandLockReason || "",
+    commandLockRemainingMs: getVoiceCommandLockRemainingMs(),
+    recentEvents: (appState.voiceDebugEvents || []).slice(0, 5)
+  }, null, 2);
+
+  panel.append(title, body);
+  return panel;
 }
 
 function createRecipeIcon(assetPath, label = "") {
@@ -3268,6 +3483,10 @@ function renderStageIntro(title, description, backScreen, continueScreen, contin
     main.appendChild(note);
   }
 
+  if (DEV_MODE) {
+    main.appendChild(createVoiceDebugPanel());
+  }
+
   const actions = document.createElement("div");
   actions.className = "stage-actions";
   actions.append(
@@ -3321,6 +3540,9 @@ function renderIngredientsIntro() {
     readyLabel: "Voice ready"
   }));
   appendVoiceError(main);
+  if (DEV_MODE) {
+    main.appendChild(createVoiceDebugPanel());
+  }
 
   const actions = document.createElement("div");
   actions.className = "stage-actions";
@@ -3366,6 +3588,9 @@ function renderPreparationIntro() {
   header.append(title, stageLabel);
   main.append(recipeIcon, description);
   main.appendChild(createVoiceActivationCard("Voice enabled. You can say: Next, Repeat, Back."));
+  if (DEV_MODE) {
+    main.appendChild(createVoiceDebugPanel());
+  }
 
   const actions = document.createElement("div");
   actions.className = "stage-actions";
@@ -3407,6 +3632,9 @@ function renderCookingIntro() {
   header.append(title, stageLabel);
   main.append(recipeIcon);
   main.appendChild(createVoiceActivationCard("Voice enabled. You can say: Next, Repeat, Pause."));
+  if (DEV_MODE) {
+    main.appendChild(createVoiceDebugPanel());
+  }
 
   const actions = document.createElement("div");
   actions.className = "stage-actions";
