@@ -40,6 +40,12 @@ const appEl = document.getElementById("app");
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let voiceRecognition = null;
 let onboardingDemoIntervalId = null;
+let lastVoiceSpeechEndAt = null;
+let lastVoiceHandledCommand = {
+  key: "",
+  transcript: "",
+  at: 0
+};
 
 const ONBOARDING_DEMO_STATES = [
   "Screenshot imported ✓",
@@ -104,7 +110,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v61"; 
+const BUILD_VERSION = "DEV BUILD: v62"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -339,6 +345,113 @@ function markVoiceCommandExecuted(commandLabel) {
   setVoiceCommandStatus(`Executing: ${commandLabel || "command"}`, 650);
 }
 
+function getVoiceTimestamp() {
+  return typeof performance !== "undefined" && typeof performance.now === "function"
+    ? performance.now()
+    : Date.now();
+}
+
+function roundVoiceTiming(value) {
+  return Number.isFinite(value) ? Math.round(value) : null;
+}
+
+function logVoiceTiming(stage, details = {}) {
+  console.log(`[voice-timing] ${stage}`, {
+    ...details,
+    t: roundVoiceTiming(getVoiceTimestamp())
+  });
+}
+
+function normalizeVoiceCommandText(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getFastVoiceCommand(commandText) {
+  const normalized = normalizeVoiceCommandText(commandText);
+  if (!normalized) {
+    return null;
+  }
+
+  const commandMap = {
+    "next": { key: "next", label: "Next" },
+    "next step": { key: "next", label: "Next" },
+    "repeat": { key: "repeat", label: "Repeat" },
+    "repeat step": { key: "repeat", label: "Repeat" },
+    "pause": { key: "pause", label: "Pause" },
+    "pause timer": { key: "pause_timer", label: "Pause Timer" },
+    "resume": { key: "resume", label: "Resume" },
+    "resume timer": { key: "resume", label: "Resume Timer" },
+    "start cooking": { key: "start_cooking", label: "Start Cooking" },
+    "skip timer": { key: "skip_timer", label: "Skip Timer" }
+  };
+
+  return commandMap[normalized] || null;
+}
+
+function shouldSuppressDuplicateVoiceCommand(commandKey, transcript) {
+  const now = getVoiceTimestamp();
+  const normalizedTranscript = normalizeVoiceCommandText(transcript);
+
+  if (
+    lastVoiceHandledCommand.key === commandKey &&
+    lastVoiceHandledCommand.transcript === normalizedTranscript &&
+    now - lastVoiceHandledCommand.at < 900
+  ) {
+    logVoiceTiming("duplicate-suppressed", {
+      commandKey,
+      transcript: normalizedTranscript
+    });
+    return true;
+  }
+
+  lastVoiceHandledCommand = {
+    key: commandKey,
+    transcript: normalizedTranscript,
+    at: now
+  };
+  return false;
+}
+
+function logVoiceTranscriptArrival(transcript, options = {}) {
+  const now = getVoiceTimestamp();
+  const speechEndToTranscriptMs = Number.isFinite(lastVoiceSpeechEndAt)
+    ? now - lastVoiceSpeechEndAt
+    : null;
+
+  logVoiceTiming("transcript-received", {
+    transcript,
+    source: options.source || "unknown",
+    isFinal: Boolean(options.isFinal),
+    speechEndToTranscriptMs: roundVoiceTiming(speechEndToTranscriptMs)
+  });
+
+  return {
+    transcriptReceivedAt: now,
+    speechEndAt: lastVoiceSpeechEndAt,
+    source: options.source || "unknown",
+    isFinal: Boolean(options.isFinal)
+  };
+}
+
+function logVoiceCommandMatch(commandKey, transcript, timing = {}) {
+  const now = getVoiceTimestamp();
+  const transcriptToMatchMs = Number.isFinite(timing.transcriptReceivedAt)
+    ? now - timing.transcriptReceivedAt
+    : null;
+
+  logVoiceTiming("command-matched", {
+    commandKey,
+    transcript,
+    source: timing.source || "unknown",
+    isFinal: Boolean(timing.isFinal),
+    transcriptToMatchMs: roundVoiceTiming(transcriptToMatchMs)
+  });
+}
+
 function isVoiceUiActive() {
   return Boolean(appState.voiceUserSpeaking || appState.voiceOutputSpeaking);
 }
@@ -483,16 +596,35 @@ function highlightVoiceIngredient(index, durationMs = 260) {
   }, durationMs);
 }
 
-function runVoiceAction(actionName, commandLabel, action, delayMs = 110) {
+function runVoiceAction(actionName, commandLabel, action, delayMs = 0, timing = null) {
   if (actionName) {
     flashActionButton(actionName);
   }
   if (commandLabel) {
     markVoiceCommandExecuted(commandLabel);
   }
-  window.setTimeout(() => {
+  const executeAction = () => {
+    const now = getVoiceTimestamp();
+    const matchToActionMs = Number.isFinite(timing?.matchedAt)
+      ? now - timing.matchedAt
+      : null;
+
+    logVoiceTiming("action-executed", {
+      commandKey: timing?.commandKey || actionName || commandLabel || "unknown",
+      actionName: actionName || "",
+      commandLabel: commandLabel || "",
+      matchToActionMs: roundVoiceTiming(matchToActionMs)
+    });
+
     action();
-  }, delayMs);
+  };
+
+  if (delayMs > 0) {
+    window.setTimeout(executeAction, delayMs);
+    return;
+  }
+
+  executeAction();
 }
 
 function isGuidanceScreen(screenName) {
@@ -1575,38 +1707,55 @@ function skipTimerAndAdvance() {
   goToNextCookingStep();
 }
 
-function handleVoiceCommand(commandText) {
+function handleVoiceCommand(commandText, options = {}) {
   const command = commandText.toLowerCase();
+  const timing = {
+    transcriptReceivedAt: options.transcriptReceivedAt ?? null,
+    source: options.source || "final",
+    isFinal: Boolean(options.isFinal),
+    commandKey: options.commandKey || null,
+    matchedAt: null
+  };
   setVoiceCommandStatus("Processing voice command...", 700);
+
+  function matchCommand(commandKey) {
+    timing.commandKey = commandKey;
+    timing.matchedAt = getVoiceTimestamp();
+    logVoiceCommandMatch(commandKey, commandText, timing);
+  }
 
   if (appState.currentScreen === "ingredientsIntro") {
     if (command.includes("next") || command.includes("continue") || command.includes("start")) {
+      matchCommand("next");
       runVoiceAction("next", "Continue", () => {
         setScreen("ingredients");
-      });
+      }, 0, timing);
       return;
     }
 
     if (command.includes("back")) {
+      matchCommand("back");
       runVoiceAction("back", "Back", () => {
         setScreen("analysis");
-      });
+      }, 0, timing);
       return;
     }
   }
 
   if (appState.currentScreen === "preparationIntro") {
     if (command.includes("next") || command.includes("continue") || command.includes("start")) {
+      matchCommand("next");
       runVoiceAction("next", "Continue", () => {
         startPreparationFlow();
-      });
+      }, 0, timing);
       return;
     }
 
     if (command.includes("back")) {
+      matchCommand("back");
       runVoiceAction("back", "Back", () => {
         setScreen("ingredients");
-      });
+      }, 0, timing);
       return;
     }
   }
@@ -1614,9 +1763,16 @@ function handleVoiceCommand(commandText) {
   if (appState.currentScreen === "ingredients") {
     const ingredientIndex = findIngredientIndexFromVoice(command);
     if (ingredientIndex >= 0) {
+      matchCommand("check_ingredient");
       highlightVoiceIngredient(ingredientIndex);
       markVoiceCommandExecuted("Check Ingredient");
       window.setTimeout(() => {
+        logVoiceTiming("action-executed", {
+          commandKey: "check_ingredient",
+          actionName: "check-ingredient",
+          commandLabel: "Check Ingredient",
+          matchToActionMs: roundVoiceTiming(getVoiceTimestamp() - timing.matchedAt)
+        });
         setIngredientChecked(ingredientIndex, true);
         clearVoiceIngredientHighlight();
         renderIngredients();
@@ -1625,16 +1781,18 @@ function handleVoiceCommand(commandText) {
     }
 
     if (command.includes("next") || command.includes("ready") || command.includes("continue")) {
+      matchCommand("next");
       runVoiceAction("next", "Ready", () => {
         setScreen("preparationIntro");
-      });
+      }, 0, timing);
       return;
     }
 
     if (command.includes("back")) {
+      matchCommand("back");
       runVoiceAction("back", "Back", () => {
         setScreen("ingredientsIntro");
-      });
+      }, 0, timing);
       return;
     }
 
@@ -1643,9 +1801,10 @@ function handleVoiceCommand(commandText) {
 
   if (command.includes("next")) {
     if (appState.currentScreen === "preparation") {
+      matchCommand("next");
       runVoiceAction("next", "Next", () => {
         advancePreparationStep();
-      });
+      }, 0, timing);
       return;
     }
 
@@ -1657,61 +1816,108 @@ function handleVoiceCommand(commandText) {
       return;
     }
 
+    matchCommand("next");
     runVoiceAction("next", "Next", () => {
       goToNextCookingStep();
-    });
+    }, 0, timing);
     return;
   }
 
   if (command.includes("previous") || command.includes("back")) {
     if (appState.currentScreen === "cookingIntro") {
+      matchCommand("back");
       runVoiceAction("back", "Back", () => {
         openPreparationIntro();
-      });
+      }, 0, timing);
       return;
     }
 
     if (appState.currentScreen === "preparation") {
+      matchCommand("back");
       runVoiceAction("back", "Back", () => {
         goBackPreparationStep();
-      });
+      }, 0, timing);
       return;
     }
 
+    matchCommand("back");
     runVoiceAction("back", "Back", () => {
       goToPreviousCookingStep();
-    });
+    }, 0, timing);
     return;
   }
 
   if (command.includes("repeat")) {
     if (appState.currentScreen === "preparation") {
+      matchCommand("repeat");
       runVoiceAction("repeat", "Repeat", () => {
         const prepText = getCurrentPreparationText();
         if (prepText) {
           speak(prepText);
         }
-      });
+      }, 0, timing);
       return;
     }
 
+    matchCommand("repeat");
     runVoiceAction("repeat", "Repeat", () => {
       repeatCurrentCookingStep();
-    });
+    }, 0, timing);
     return;
   }
 
   if (command.includes("pause")) {
+    matchCommand(command.includes("timer") ? "pause_timer" : "pause");
     runVoiceAction("pause", "Pause", () => {
       toggleGuidancePause();
-    });
+    }, 0, timing);
     return;
   }
 
   if (appState.currentScreen === "cookingIntro" && command.includes("start") && command.includes("cook")) {
+    matchCommand("start_cooking");
     runVoiceAction("next", "Start Cooking", () => {
       setScreen("cooking");
-    });
+    }, 0, timing);
+    return;
+  }
+
+  if (command.includes("resume")) {
+    const step = getCurrentCookingStep();
+    const hasTimer = step && Number.isInteger(step.timerSeconds) && step.timerSeconds > 0;
+
+    if (!hasTimer) {
+      setVoiceHint("This step has no timer.", 1800);
+      return;
+    }
+
+    matchCommand("resume");
+    if (appState.timerStatus === "paused") {
+      runVoiceAction("pause", "Resume", () => {
+        resumeTimer();
+        appState.timerPaused = false;
+        appState.timerMessage = "Timer running";
+        setTimerStatus("running", "voice resume timer");
+
+        if (appState.currentScreen === "cooking") {
+          renderCooking();
+        }
+        if (appState.currentScreen === "timerActive") {
+          renderTimerActive();
+        }
+      }, 0, timing);
+    } else if (appState.timerStatus === "idle") {
+      runVoiceAction("pause", "Resume", () => {
+        startStepTimerIfNeeded(step);
+
+        if (appState.currentScreen === "cooking") {
+          renderCooking();
+        }
+        if (appState.currentScreen === "timerActive") {
+          renderTimerActive();
+        }
+      }, 0, timing);
+    }
     return;
   }
 
@@ -1724,6 +1930,7 @@ function handleVoiceCommand(commandText) {
       return;
     }
 
+    matchCommand("start_timer");
     if (appState.timerStatus === "paused") {
       resumeTimer();
       appState.timerPaused = false;
@@ -1735,6 +1942,13 @@ function handleVoiceCommand(commandText) {
       markVoiceCommandExecuted("Start Timer");
     }
 
+    logVoiceTiming("action-executed", {
+      commandKey: "start_timer",
+      actionName: "start-timer",
+      commandLabel: "Start Timer",
+      matchToActionMs: roundVoiceTiming(getVoiceTimestamp() - timing.matchedAt)
+    });
+
     if (appState.currentScreen === "timerActive") {
       renderTimerActive();
     }
@@ -1742,16 +1956,18 @@ function handleVoiceCommand(commandText) {
   }
 
   if (command.includes("stop")) {
+    matchCommand("stop");
     runVoiceAction("stop", "Stop", () => {
       stopCookingFlow();
-    });
+    }, 0, timing);
     return;
   }
 
   if (command.includes("skip") && command.includes("timer")) {
+    matchCommand("skip_timer");
     runVoiceAction("skip-timer", "Skip Timer", () => {
       skipTimerAndAdvance();
-    });
+    }, 0, timing);
     return;
   }
 
@@ -1781,34 +1997,62 @@ function startVoiceCommands() {
     voiceRecognition = new SpeechRecognition();
     voiceRecognition.lang = "en-US";
     voiceRecognition.continuous = true;
-    voiceRecognition.interimResults = false;
+    voiceRecognition.interimResults = true;
 
     voiceRecognition.onresult = (event) => {
-      const latest = event.results[event.results.length - 1];
-      if (!latest || !latest[0]) {
+      let latestTranscript = "";
+      let latestIsFinal = false;
+
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const result = event.results[i];
+        const transcript = (result?.[0]?.transcript || "").trim();
+        if (!transcript) {
+          continue;
+        }
+        latestTranscript = transcript;
+        latestIsFinal = Boolean(result.isFinal);
+      }
+
+      if (!latestTranscript) {
         return;
       }
 
-      const transcript = (latest[0].transcript || "").trim();
-      if (!transcript) {
-        return;
-      }
+      const transcriptTiming = logVoiceTranscriptArrival(latestTranscript, {
+        source: latestIsFinal ? "final" : "interim",
+        isFinal: latestIsFinal
+      });
 
-      appState.voiceHeard = transcript;
+      appState.voiceHeard = latestTranscript;
       pulseVoiceRecognitionActivity();
-      const heardLabel = transcript.length > 26 ? `${transcript.slice(0, 26)}...` : transcript;
-      setVoiceCommandStatus(`Heard: ${heardLabel}`, 1000);
+      const heardLabel = latestTranscript.length > 26 ? `${latestTranscript.slice(0, 26)}...` : latestTranscript;
+      setVoiceCommandStatus(`Heard: ${heardLabel}`, latestIsFinal ? 1000 : 350);
       renderCurrentVoiceScreen();
 
-      window.setTimeout(() => {
-        handleVoiceCommand(transcript);
-      }, 90);
+      const fastCommand = getFastVoiceCommand(latestTranscript);
+      if (fastCommand) {
+        if (shouldSuppressDuplicateVoiceCommand(fastCommand.key, latestTranscript)) {
+          return;
+        }
+
+        handleVoiceCommand(latestTranscript, {
+          ...transcriptTiming,
+          commandKey: fastCommand.key
+        });
+        return;
+      }
+
+      if (latestIsFinal) {
+        handleVoiceCommand(latestTranscript, transcriptTiming);
+      }
     };
 
     voiceRecognition.onstart = () => {
       if (!appState.voiceEnabled) {
         return;
       }
+      logVoiceTiming("recognition-started", {
+        screen: appState.currentScreen
+      });
       appState.voiceListening = true;
       appState.voiceUserSpeaking = false;
       setVoiceCommandStatus("Listening...", 0);
@@ -1823,10 +2067,16 @@ function startVoiceCommands() {
     };
 
     voiceRecognition.onspeechend = () => {
+      lastVoiceSpeechEndAt = getVoiceTimestamp();
+      logVoiceTiming("speech-ended", {});
       clearVoiceRecognitionActivity();
     };
 
     voiceRecognition.onend = () => {
+      logVoiceTiming("recognition-ended", {
+        voiceEnabled: appState.voiceEnabled,
+        screen: appState.currentScreen
+      });
       appState.voiceListening = false;
       clearVoiceRecognitionActivity();
       if (appState.voiceEnabled && isGuidanceScreen(appState.currentScreen)) {
@@ -1843,6 +2093,9 @@ function startVoiceCommands() {
     };
 
     voiceRecognition.onerror = (event) => {
+      logVoiceTiming("recognition-error", {
+        error: event && event.error ? String(event.error) : "unknown"
+      });
       appState.voiceEnabled = false;
       appState.voiceListening = false;
       resetVoiceActivityState();
@@ -1872,6 +2125,9 @@ function startVoiceCommands() {
   setVoiceCommandStatus("Listening...", 0);
   try {
     voiceRecognition.start();
+    logVoiceTiming("recognition-start-requested", {
+      screen: appState.currentScreen
+    });
   } catch {
     appState.voiceEnabled = false;
     appState.voiceErrorMessage = "Could not start voice input. Check microphone permission and try again.";

@@ -59,92 +59,113 @@ Important UX rules:
 ------------------
 ------------------
 
-# Session work log (2026-03-16)
+# Apres fermature
 
-- Added and aligned design-system style classes (buttons, steps, timer, voice, cooking container).
-- Kept existing UI behavior while introducing reusable class aliases for safer future styling changes.
-- Timeline improvements:
-	- removed the "Focused step timeline" heading.
-	- timer indicator icon now renders in step cards and is right-aligned.
-- Cooking/Timer voice UI updates:
-	- replaced noisy listening text with visual voice panel state.
-	- added mic icon and active panel emphasis styling.
-- Timer panel updates:
-	- reduced content to icon + remaining time only.
-	- added strong running/paused visual states.
-- Cooking action buttons updates:
-	- larger tap targets (60px min height).
-	- improved spacing and primary action emphasis.
-- Voice toggle reliability fixes:
-	- introduced a single source of truth (`voiceEnabled`) for toggle intent.
-	- synchronized UI highlight, toggle checked state, and recognition lifecycle.
-	- centralized toggle behavior in one helper (`setVoiceEnabled`).
-	- improved mobile tap hit area for custom switch input.
-	- added inline voice error messages for permission/support/start failures.
+You are working on the KitchenPilot web app.
 
-- Validation status:
-	- syntax/errors checked after each wave of edits; app.js and style.css were clean in editor checks.
+Before implementing anything, you must fully understand the project.
 
+DO NOT make any changes yet.
 
-	# Apres VSC fermé
-	Analyze the project structure
-	Review current implementation
-	Review current implementation
+--------------------------------------------------
+1. PROJECT SCAN
+--------------------------------------------------
 
-	You are working on an existing project called KitchenPilot.
+Scan the entire project structure.
 
-KitchenPilot is a mobile-first, hands-free cooking assistant.
+Identify and explain:
 
-CORE FEATURES:
-- Users input a recipe via URL or raw text
-- The app parses the recipe into structured data (title, ingredients, steps)
-- There is a Cooking Mode that guides the user step-by-step
-- Voice commands allow hands-free navigation (next, repeat, etc.)
-- Timers may be triggered based on steps
+- main entry point (app.js or equivalent)
+- where routing or screen switching happens
+- where homepage is implemented
+- where Recipe Analysis page is implemented
+- where recipe parsing happens (parse-recipe.js or similar)
+- where state/data is passed between screens
 
-IMPORTANT:
-This project already exists.
-Do NOT recreate the project.
-Do NOT rewrite everything.
+Keep explanation short and clear.
 
-YOUR TASK:
+--------------------------------------------------
+2. DATA FLOW
+--------------------------------------------------
 
-1. Analyze the entire project structure
-- list main folders and files
-- identify key components
+Trace how a recipe moves through the app:
 
-2. Identify where these features are implemented:
-- homepage (URL / text input)
-- recipe parsing logic
-- cooking mode UI
-- step navigation
-- voice control (if present)
+- from input (URL, screenshot, text)
+→ parsing
+→ normalized recipe object
+→ Recipe Analysis screen
 
-3. Explain how the data flows:
-- from input → parsing → UI → cooking mode
+Show:
+- where the recipe object is created
+- where it is transformed
+- where it is rendered
 
-4. Identify potential issues or missing pieces:
-- broken logic
-- incomplete features
-- unclear structure
+--------------------------------------------------
+3. RECIPE OBJECT STRUCTURE
+--------------------------------------------------
 
-5. DO NOT make any changes yet
+Find and describe the current recipe object structure.
 
-OUTPUT FORMAT:
-- Clear structured explanation
-- Short sections
-- No code changes
+List all fields currently used, for example:
+- title
+- ingredients
+- preparationSteps
+- cookingSteps
+- sourceUrl
+- etc.
 
-IMPORTANT RULES:
-- Only analyze
-- Do not modify anything
-- Do not generate new files
+Confirm:
+- which metadata fields exist
+- which are missing (prepTime, cookTime, etc.)
 
+--------------------------------------------------
+4. PARSER ANALYSIS
+--------------------------------------------------
 
-# Apres
-Please focus on the Cooking Mode implementation and explain how it works in detail.
+Locate the parser (parse-recipe.js or equivalent).
 
-NYT roast chicken reference: https://cooking.nytimes.com/recipes/1026751-ina-gartens-perfect-roast-chicken
-BBC Good Food quiche Lorraine: https://www.bbcgoodfood.com/recipes/ultimate-quiche-lorraine
-Love & Lemons minestrone: https://www.loveandlemons.com/minestrone-soup/
-Public roast chicken ingredient summary used to shape the prototype fixture: https://www.youtube.com/watch?v=cYa4Ha2OjoI
+Explain:
+- how HTML is fetched
+- how data is extracted
+- whether JSON-LD / schema.org is used
+- what fields are currently extracted
+
+--------------------------------------------------
+5. RENDERING ANALYSIS
+--------------------------------------------------
+
+Locate Recipe Analysis rendering logic.
+
+Explain:
+- how data is displayed
+- where metadata would appear
+- how missing values are handled
+
+--------------------------------------------------
+6. CONSTRAINTS
+--------------------------------------------------
+
+Confirm the following:
+
+- No UI redesign unless explicitly requested
+- No new libraries unless necessary
+- Keep changes minimal and controlled
+- Do not break existing flows
+
+--------------------------------------------------
+7. SUMMARY
+--------------------------------------------------
+
+Provide a short summary:
+
+- current architecture
+- current limitations (especially missing metadata extraction)
+- where future changes should be applied (parser vs UI)
+
+--------------------------------------------------
+
+STOP HERE.
+
+Do NOT implement anything yet.
+
+Wait for the next instruction.
