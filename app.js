@@ -116,7 +116,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v65"; 
+const BUILD_VERSION = "DEV BUILD: v66"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -1836,6 +1836,36 @@ function skipTimerAndAdvance() {
   goToNextCookingStep();
 }
 
+function enterCookingFlow() {
+  const screenBefore = appState.currentScreen;
+  const cookingIndexBefore = appState.cookingIndex;
+  const timerBefore = getVoiceTimerSnapshot();
+
+  appState.cookingIndex = 0;
+  appState.activeTimerSeconds = null;
+  appState.timerPaused = false;
+  appState.timerSkippedStepIndex = null;
+  setTimerStatus("idle", "enter cooking flow");
+  setScreen("cooking");
+
+  console.log("[cooking-intro] Entering cooking flow", {
+    screenBefore,
+    screenAfter: appState.currentScreen,
+    cookingIndexBefore,
+    cookingIndexAfter: appState.cookingIndex,
+    timerBefore,
+    timerAfter: getVoiceTimerSnapshot()
+  });
+  recordVoiceDebugEvent("cooking-intro-enter-flow", {
+    screenBefore,
+    screenAfter: appState.currentScreen,
+    cookingIndexBefore,
+    cookingIndexAfter: appState.cookingIndex,
+    timerBefore,
+    timerAfter: getVoiceTimerSnapshot()
+  });
+}
+
 function handleVoiceCommand(commandText, options = {}) {
   const command = commandText.toLowerCase();
   const timing = {
@@ -1965,6 +1995,15 @@ function handleVoiceCommand(commandText, options = {}) {
   }
 
   if (command.includes("next")) {
+    if (appState.currentScreen === "cookingIntro") {
+      matchCommand("start_cooking");
+      setVoiceCommandLock("cookingIntro:next");
+      runVoiceAction("next", "Start Cooking", () => {
+        enterCookingFlow();
+      }, 0, timing);
+      return;
+    }
+
     if (appState.currentScreen === "preparation") {
       matchCommand("next");
       setVoiceCommandLock("preparation:next");
@@ -2048,7 +2087,7 @@ function handleVoiceCommand(commandText, options = {}) {
     matchCommand("start_cooking");
     setVoiceCommandLock("cookingIntro:start");
     runVoiceAction("next", "Start Cooking", () => {
-      setScreen("cooking");
+      enterCookingFlow();
     }, 0, timing);
     return;
   }
@@ -3681,7 +3720,7 @@ function renderCookingIntro() {
   actions.append(
     createButton("Home", "secondary-action", () => setScreen("home"), "home"),
     createButton("Back", "secondary-action", () => openPreparationIntro(), "back"),
-    createButton("Start Cooking", "primary primary-action", () => setScreen("cooking"), "next")
+    createButton("Start Cooking", "primary primary-action", () => enterCookingFlow(), "next")
   );
 
   footer.appendChild(actions);
