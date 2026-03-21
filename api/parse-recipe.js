@@ -1,4 +1,5 @@
 const OPENAI_API_URL = "https://api.openai.com/v1/responses";
+const REMOTE_FETCH_USER_AGENT = "KitchenPilot/1.0 (+https://localhost)";
 
 function setCorsHeaders(res) {
   if (!res || typeof res.setHeader !== "function") {
@@ -72,6 +73,511 @@ function createApiError(message, statusCode, code) {
     error.code = code;
   }
   return error;
+}
+
+function isHttpUrl(value) {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function normalizeWhitespace(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function decodeHtmlEntities(value) {
+  return String(value || "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16)));
+}
+
+function stripHtml(html) {
+  return decodeHtmlEntities(
+    String(html || "")
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+      .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, " ")
+      .replace(/<(br|\/p|\/div|\/li|\/section|\/article|\/h[1-6])\b[^>]*>/gi, "\n")
+      .replace(/<[^>]+>/g, " ")
+  );
+}
+
+function parseJsonSafely(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function flattenJsonLdNodes(node, results = []) {
+  if (!node) {
+    return results;
+  }
+
+  if (Array.isArray(node)) {
+    node.forEach((item) => flattenJsonLdNodes(item, results));
+    return results;
+  }
+
+  if (typeof node !== "object") {
+    return results;
+  }
+
+  results.push(node);
+
+  if (Array.isArray(node["@graph"])) {
+    node["@graph"].forEach((item) => flattenJsonLdNodes(item, results));
+  }
+
+  return results;
+}
+
+function getTypeNames(node) {
+  const type = node?.["@type"];
+  if (Array.isArray(type)) {
+    return type.map((entry) => String(entry || "").toLowerCase());
+  }
+  if (typeof type === "string") {
+    return [type.toLowerCase()];
+  }
+  return [];
+}
+
+function isRecipeSchemaNode(node) {
+  return getTypeNames(node).includes("recipe");
+}
+
+function extractJsonLdRecipe(html) {
+  const scriptRegex = /<script[^>]*type=(?:"application\/ld\+json"|'application\/ld\+json'|application\/ld\+json)[^>]*>([\s\S]*?)<\/script>/gi;
+  const recipeCandidates = [];
+  let match;
+
+  while ((match = scriptRegex.exec(String(html || "")))) {
+    const payload = parseJsonSafely(match[1].trim());
+    if (!payload) {
+      continue;
+    }
+
+    const nodes = flattenJsonLdNodes(payload, []);
+    nodes.forEach((node) => {
+      if (isRecipeSchemaNode(node)) {
+        recipeCandidates.push(node);
+      }
+    });
+  }
+
+  recipeCandidates.sort((left, right) => {
+    const leftScore = (Array.isArray(left?.recipeIngredient) ? left.recipeIngredient.length : 0) +
+      (Array.isArray(left?.recipeInstructions) ? left.recipeInstructions.length : 0);
+    const rightScore = (Array.isArray(right?.recipeIngredient) ? right.recipeIngredient.length : 0) +
+      (Array.isArray(right?.recipeInstructions) ? right.recipeInstructions.length : 0);
+    return rightScore - leftScore;
+  });
+
+  return recipeCandidates[0] || null;
+}
+
+function parseIsoDurationToMinutes(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const match = value.trim().match(/^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?)?$/i);
+  if (!match) {
+    return null;
+  }
+
+  const days = Number(match[1] || 0);
+  const hours = Number(match[2] || 0);
+  const minutes = Number(match[3] || 0);
+  return (days * 24 * 60) + (hours * 60) + minutes;
+}
+
+function normalizeDurationMetadata(value) {
+  if (value === null || value === undefined || value === "") {
+    return {};
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return { minutes: value };
+  }
+
+  if (typeof value === "string") {
+    const isoMinutes = parseIsoDurationToMinutes(value);
+    if (isoMinutes !== null) {
+      return { minutes: isoMinutes };
+    }
+
+    const trimmed = normalizeWhitespace(value);
+    if (trimmed) {
+      return { display: trimmed };
+    }
+  }
+
+  return {};
+}
+
+function getTextContent(value) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  if (typeof value === "string" || typeof value === "number") {
+    return normalizeWhitespace(value);
+  }
+  if (typeof value === "object") {
+    if (typeof value.text === "string") {
+      return normalizeWhitespace(value.text);
+    }
+    if (typeof value.name === "string") {
+      return normalizeWhitespace(value.name);
+    }
+  }
+  return "";
+}
+
+function getAuthorText(value) {
+  if (!value) {
+    return "";
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(getAuthorText).filter(Boolean).join(", ");
+  }
+
+  if (typeof value === "string") {
+    return normalizeWhitespace(value);
+  }
+
+  if (typeof value === "object") {
+    if (typeof value.name === "string") {
+      return normalizeWhitespace(value.name);
+    }
+    if (typeof value.author === "string") {
+      return normalizeWhitespace(value.author);
+    }
+  }
+
+  return "";
+}
+
+function getYieldText(value) {
+  if (!value) {
+    return "";
+  }
+
+  if (Array.isArray(value)) {
+    const candidates = value
+      .map(getTextContent)
+      .filter(Boolean)
+      .sort((left, right) => right.length - left.length);
+    return candidates[0] || "";
+  }
+
+  return getTextContent(value);
+}
+
+function flattenRecipeInstructions(value, results = []) {
+  if (!value) {
+    return results;
+  }
+
+  if (typeof value === "string") {
+    const text = normalizeWhitespace(value);
+    if (text) {
+      results.push(text);
+    }
+    return results;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => flattenRecipeInstructions(item, results));
+    return results;
+  }
+
+  if (typeof value === "object") {
+    const typeNames = getTypeNames(value);
+
+    if (typeNames.includes("howtosection")) {
+      flattenRecipeInstructions(value.itemListElement || value.hasPart, results);
+      return results;
+    }
+
+    const text = getTextContent(value);
+    if (text) {
+      results.push(text);
+    }
+
+    flattenRecipeInstructions(value.itemListElement, results);
+  }
+
+  return results;
+}
+
+function extractMetaTagContent(html, attrName, attrValue) {
+  const escapedValue = attrValue.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const patterns = [
+    new RegExp(`<meta[^>]*${attrName}=["']${escapedValue}["'][^>]*content=["']([^"']+)["'][^>]*>`, "i"),
+    new RegExp(`<meta[^>]*content=["']([^"']+)["'][^>]*${attrName}=["']${escapedValue}["'][^>]*>`, "i")
+  ];
+
+  for (const pattern of patterns) {
+    const match = String(html || "").match(pattern);
+    if (match && match[1]) {
+      return normalizeWhitespace(decodeHtmlEntities(match[1]));
+    }
+  }
+
+  return "";
+}
+
+function extractItempropContent(html, itempropName) {
+  const escapedValue = itempropName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const patterns = [
+    new RegExp(`<meta[^>]*itemprop=["']${escapedValue}["'][^>]*content=["']([^"']+)["'][^>]*>`, "i"),
+    new RegExp(`<[^>]*itemprop=["']${escapedValue}["'][^>]*content=["']([^"']+)["'][^>]*>`, "i"),
+    new RegExp(`<[^>]*itemprop=["']${escapedValue}["'][^>]*>([^<]+)<\\/[^>]+>`, "i")
+  ];
+
+  for (const pattern of patterns) {
+    const match = String(html || "").match(pattern);
+    if (match && match[1]) {
+      return normalizeWhitespace(decodeHtmlEntities(match[1]));
+    }
+  }
+
+  return "";
+}
+
+function extractTitleFromHtml(html) {
+  const ogTitle = extractMetaTagContent(html, "property", "og:title");
+  if (ogTitle) {
+    return ogTitle;
+  }
+
+  const titleMatch = String(html || "").match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  if (titleMatch && titleMatch[1]) {
+    return normalizeWhitespace(decodeHtmlEntities(titleMatch[1]));
+  }
+
+  const h1Match = String(html || "").match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+  if (h1Match && h1Match[1]) {
+    return normalizeWhitespace(stripHtml(h1Match[1]));
+  }
+
+  return "";
+}
+
+function extractFallbackMetadataFromHtml(html) {
+  const prep = normalizeDurationMetadata(extractItempropContent(html, "prepTime"));
+  const cook = normalizeDurationMetadata(extractItempropContent(html, "cookTime"));
+  const total = normalizeDurationMetadata(extractItempropContent(html, "totalTime"));
+  const yieldValue = extractItempropContent(html, "recipeYield");
+  const difficulty = extractItempropContent(html, "difficulty");
+  const category = extractItempropContent(html, "recipeCategory") || extractItempropContent(html, "recipeCuisine");
+  const author = extractMetaTagContent(html, "name", "author") || extractItempropContent(html, "author");
+  const ratingValue = extractItempropContent(html, "ratingValue");
+  const reviewCount = extractItempropContent(html, "ratingCount") || extractItempropContent(html, "reviewCount");
+
+  return {
+    title: extractTitleFromHtml(html) || undefined,
+    prepTime: prep.display,
+    prepTimeMinutes: prep.minutes,
+    cookTime: cook.display,
+    cookTimeMinutes: cook.minutes,
+    totalTime: total.display,
+    totalTimeMinutes: total.minutes,
+    yield: yieldValue || undefined,
+    difficulty: difficulty || undefined,
+    category: category || undefined,
+    author: author || undefined,
+    rating: ratingValue || undefined,
+    reviewCount: reviewCount || undefined
+  };
+}
+
+function extractMetadataFromRecipeSchema(recipeNode) {
+  if (!recipeNode || typeof recipeNode !== "object") {
+    return {};
+  }
+
+  const prep = normalizeDurationMetadata(recipeNode.prepTime);
+  const cook = normalizeDurationMetadata(recipeNode.cookTime);
+  const total = normalizeDurationMetadata(recipeNode.totalTime);
+  const yieldValue = getYieldText(recipeNode.recipeYield);
+  const category = Array.isArray(recipeNode.recipeCategory)
+    ? recipeNode.recipeCategory.map(getTextContent).filter(Boolean).join(", ")
+    : getTextContent(recipeNode.recipeCategory);
+  const cuisine = Array.isArray(recipeNode.recipeCuisine)
+    ? recipeNode.recipeCuisine.map(getTextContent).filter(Boolean).join(", ")
+    : getTextContent(recipeNode.recipeCuisine);
+  const author = getAuthorText(recipeNode.author);
+  const aggregateRating = recipeNode.aggregateRating || {};
+
+  return {
+    title: getTextContent(recipeNode.name) || undefined,
+    prepTime: prep.display,
+    prepTimeMinutes: prep.minutes,
+    cookTime: cook.display,
+    cookTimeMinutes: cook.minutes,
+    totalTime: total.display,
+    totalTimeMinutes: total.minutes,
+    yield: yieldValue || undefined,
+    difficulty: getTextContent(recipeNode.difficulty || recipeNode.skillLevel) || undefined,
+    category: category || cuisine || undefined,
+    author: author || undefined,
+    rating: getTextContent(aggregateRating.ratingValue) || undefined,
+    reviewCount: getTextContent(aggregateRating.ratingCount || aggregateRating.reviewCount) || undefined
+  };
+}
+
+function buildRecipeTextFromSchema(recipeNode, metadata = {}) {
+  if (!recipeNode || typeof recipeNode !== "object") {
+    return "";
+  }
+
+  const title = getTextContent(recipeNode.name) || metadata.title || "Recipe";
+  const ingredients = Array.isArray(recipeNode.recipeIngredient)
+    ? recipeNode.recipeIngredient.map(getTextContent).filter(Boolean)
+    : [];
+  const instructions = flattenRecipeInstructions(recipeNode.recipeInstructions, []);
+
+  if (!ingredients.length && !instructions.length) {
+    return "";
+  }
+
+  const sections = [title];
+
+  if (ingredients.length) {
+    sections.push(`Ingredients:\n${ingredients.join("\n")}`);
+  }
+
+  if (instructions.length) {
+    sections.push(`Instructions:\n${instructions.map((step, index) => `${index + 1}. ${step}`).join("\n")}`);
+  }
+
+  return sections.join("\n\n").trim();
+}
+
+function buildRecipeTextFromHtmlFallback(html, metadata = {}) {
+  const visibleText = stripHtml(html);
+  const lines = visibleText
+    .split("\n")
+    .map((line) => normalizeWhitespace(line))
+    .filter(Boolean);
+
+  if (!lines.length) {
+    return "";
+  }
+
+  const dedupedLines = [];
+  const seen = new Set();
+
+  for (const line of lines) {
+    const key = line.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    dedupedLines.push(line);
+    if (dedupedLines.length >= 220) {
+      break;
+    }
+  }
+
+  const title = metadata.title || dedupedLines[0] || "Recipe";
+  return `${title}\n\n${dedupedLines.join("\n")}`.trim();
+}
+
+function omitUndefinedValues(object) {
+  return Object.fromEntries(
+    Object.entries(object || {}).filter(([, value]) => value !== undefined && value !== null && value !== "")
+  );
+}
+
+async function fetchRecipeSourcePayload(sourceUrl) {
+  const response = await fetch(sourceUrl, {
+    headers: {
+      "User-Agent": REMOTE_FETCH_USER_AGENT,
+      "Accept": "text/html,application/xhtml+xml"
+    },
+    redirect: "follow"
+  });
+
+  if (!response.ok) {
+    throw createApiError(`Could not fetch recipe URL (${response.status})`, 502, "recipe_fetch_failed");
+  }
+
+  const html = await response.text();
+  const recipeSchema = extractJsonLdRecipe(html);
+  const schemaMetadata = extractMetadataFromRecipeSchema(recipeSchema);
+  const fallbackMetadata = extractFallbackMetadataFromHtml(html);
+  const metadata = {
+    ...omitUndefinedValues(fallbackMetadata),
+    ...omitUndefinedValues(schemaMetadata),
+    sourceUrl
+  };
+  const recipeText = buildRecipeTextFromSchema(recipeSchema, metadata) || buildRecipeTextFromHtmlFallback(html, metadata);
+  const expectedMetadataFields = [
+    "prepTime",
+    "prepTimeMinutes",
+    "cookTime",
+    "cookTimeMinutes",
+    "totalTime",
+    "totalTimeMinutes",
+    "servings",
+    "yield",
+    "category",
+    "author",
+    "rating",
+    "reviewCount",
+    "sourceUrl"
+  ];
+  const presentMetadataFields = expectedMetadataFields.filter((field) => metadata[field] !== undefined && metadata[field] !== null && metadata[field] !== "");
+  const missingMetadataFields = expectedMetadataFields.filter((field) => !presentMetadataFields.includes(field));
+
+  console.log("[api/parse-recipe] Structured recipe data found", {
+    sourceUrl,
+    recipeSchemaFound: Boolean(recipeSchema)
+  });
+  console.log("[api/parse-recipe] Extracted recipe metadata", {
+    metadata,
+    presentMetadataFields,
+    missingMetadataFields
+  });
+
+  return {
+    recipeText,
+    metadata,
+    recipeSchemaFound: Boolean(recipeSchema),
+    presentMetadataFields,
+    missingMetadataFields
+  };
+}
+
+function mergeRecipeMetadata(parsedRecipe, metadata) {
+  const merged = { ...(parsedRecipe || {}) };
+
+  Object.entries(metadata || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      merged[key] = value;
+    }
+  });
+
+  return merged;
 }
 
 function extractResponseText(payload) {
@@ -284,8 +790,41 @@ async function handler(req, res) {
       return;
     }
 
-    const parsedRecipe = await parseWithOpenAI(recipeText);
-    sendJson(res, 200, parsedRecipe);
+    let recipeSourceText = recipeText;
+    let extractedMetadata = {};
+
+    if (isHttpUrl(recipeText)) {
+      const sourcePayload = await fetchRecipeSourcePayload(recipeText);
+      recipeSourceText = sourcePayload.recipeText || recipeText;
+      extractedMetadata = sourcePayload.metadata || {};
+
+      console.log("[api/parse-recipe] URL source processed", {
+        sourceUrl: recipeText,
+        recipeSchemaFound: sourcePayload.recipeSchemaFound,
+        extractedTextLength: recipeSourceText.length,
+        presentMetadataFields: sourcePayload.presentMetadataFields,
+        missingMetadataFields: sourcePayload.missingMetadataFields
+      });
+    }
+
+    const parsedRecipe = await parseWithOpenAI(recipeSourceText);
+    const finalRecipe = mergeRecipeMetadata(parsedRecipe, extractedMetadata);
+    console.log("[api/parse-recipe] Final metadata fields", omitUndefinedValues({
+      prepTime: finalRecipe.prepTime,
+      prepTimeMinutes: finalRecipe.prepTimeMinutes,
+      cookTime: finalRecipe.cookTime,
+      cookTimeMinutes: finalRecipe.cookTimeMinutes,
+      totalTime: finalRecipe.totalTime,
+      totalTimeMinutes: finalRecipe.totalTimeMinutes,
+      servings: finalRecipe.servings,
+      yield: finalRecipe.yield,
+      difficulty: finalRecipe.difficulty,
+      category: finalRecipe.category,
+      rating: finalRecipe.rating,
+      reviewCount: finalRecipe.reviewCount,
+      sourceUrl: finalRecipe.sourceUrl
+    }));
+    sendJson(res, 200, finalRecipe);
   } catch (error) {
     console.error("Recipe parser endpoint failed:", error);
     const message = error && error.message ? error.message : "Recipe parsing failed";

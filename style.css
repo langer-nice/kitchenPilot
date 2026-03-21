@@ -426,6 +426,55 @@ h3 {
   padding: var(--space-3);
 }
 
+.analysis-card {
+  padding: 20px 24px;
+}
+
+.analysis-title {
+  margin-bottom: 18px;
+}
+
+.analysis-metadata {
+  margin: 0 0 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px 16px;
+}
+
+.analysis-metadata-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.analysis-metadata-label,
+.analysis-metadata-value {
+  margin: 0;
+}
+
+.analysis-metadata-label {
+  font-weight: 600;
+}
+
+.analysis-summary-list {
+  margin-top: 0;
+}
+
+.analysis-debug {
+  margin: 16px 0 0;
+  padding: 12px;
+  border-radius: 12px;
+  background: #f6f8fb;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 label {
   font-weight: 600;
 }

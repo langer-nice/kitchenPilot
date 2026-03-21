@@ -104,7 +104,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v59"; 
+const BUILD_VERSION = "DEV BUILD: v61"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -510,6 +510,123 @@ function formatTime(totalSeconds) {
   const mins = Math.floor(safe / 60).toString().padStart(2, "0");
   const secs = (safe % 60).toString().padStart(2, "0");
   return `${mins}:${secs}`;
+}
+
+function formatRecipeDuration(value) {
+  if (value === null || value === undefined || value === "") {
+    return "";
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed || "";
+  }
+
+  const minutes = Number(value);
+  if (!Number.isFinite(minutes) || minutes < 0) {
+    return "";
+  }
+
+  if (minutes < 60) {
+    return `${Math.round(minutes)} min`;
+  }
+
+  const roundedMinutes = Math.round(minutes);
+  const hours = Math.floor(roundedMinutes / 60);
+  const remainingMinutes = roundedMinutes % 60;
+
+  if (remainingMinutes === 0) {
+    return `${hours}h`;
+  }
+
+  return `${hours}h ${remainingMinutes}m`;
+}
+
+function getRecipeMetadataItems(recipe) {
+  const safeRecipe = recipe || {};
+  const coreItems = [
+    {
+      label: "Prep",
+      value: formatRecipeDuration(safeRecipe.prepTime ?? safeRecipe.prepTimeMinutes),
+      fallback: "Not provided"
+    },
+    {
+      label: "Cook",
+      value: formatRecipeDuration(safeRecipe.cookTime ?? safeRecipe.cookTimeMinutes),
+      fallback: "Not provided"
+    },
+    {
+      label: "Total",
+      value: formatRecipeDuration(safeRecipe.totalTime ?? safeRecipe.totalTimeMinutes),
+      fallback: "Not provided"
+    },
+    {
+      label: "Serves",
+      value: safeRecipe.servings ?? safeRecipe.yield ?? "",
+      fallback: "Not provided"
+    }
+  ];
+
+  const secondaryItems = [
+    {
+      label: "Difficulty",
+      value: safeRecipe.difficulty ?? ""
+    },
+    {
+      label: "Category",
+      value: safeRecipe.category ?? ""
+    },
+    {
+      label: "Rating",
+      value: safeRecipe.rating ?? ""
+    },
+    {
+      label: "Reviews",
+      value: safeRecipe.reviewCount ?? ""
+    },
+    {
+      label: "Author",
+      value: safeRecipe.author ?? ""
+    }
+  ];
+
+  const normalizedCoreItems = coreItems.map((item) => ({
+    label: item.label,
+    value: item.value === null || item.value === undefined || item.value === "" ? item.fallback : String(item.value)
+  }));
+
+  const normalizedSecondaryItems = secondaryItems
+    .filter((item) => item.value !== null && item.value !== undefined && item.value !== "")
+    .map((item) => ({
+      label: item.label,
+      value: String(item.value)
+    }));
+
+  return [...normalizedCoreItems, ...normalizedSecondaryItems];
+}
+
+function getRecipeMetadataDebugSnapshot(recipe) {
+  const safeRecipe = recipe || {};
+  return {
+    prepTime: safeRecipe.prepTime ?? null,
+    prepTimeMinutes: safeRecipe.prepTimeMinutes ?? null,
+    cookTime: safeRecipe.cookTime ?? null,
+    cookTimeMinutes: safeRecipe.cookTimeMinutes ?? null,
+    totalTime: safeRecipe.totalTime ?? null,
+    totalTimeMinutes: safeRecipe.totalTimeMinutes ?? null,
+    servings: safeRecipe.servings ?? null,
+    yield: safeRecipe.yield ?? null,
+    difficulty: safeRecipe.difficulty ?? null,
+    category: safeRecipe.category ?? null,
+    rating: safeRecipe.rating ?? null,
+    reviewCount: safeRecipe.reviewCount ?? null,
+    author: safeRecipe.author ?? null,
+    sourceUrl: safeRecipe.sourceUrl ?? null,
+    title: safeRecipe.title ?? null,
+    ingredientCount: Array.isArray(safeRecipe.ingredients) ? safeRecipe.ingredients.length : 0,
+    preparationStepCount: Array.isArray(safeRecipe.preparationSteps) ? safeRecipe.preparationSteps.length : 0,
+    cookingStepCount: Array.isArray(safeRecipe.cookingSteps) ? safeRecipe.cookingSteps.length : 0
+  };
 }
 
 function setScreen(screenName) {
@@ -2635,6 +2752,7 @@ function renderHome() {
         signal: currentAnalysisController ? currentAnalysisController.signal : undefined
       });
       const recipe = normalizeRecipeForGuidance(parsedRecipe);
+      recipe.sourceUrl = recipe.sourceUrl || recipeUrl || "";
 
       appState.recipe = recipe;
       initializeIngredientChecklist(recipe);
@@ -2790,11 +2908,38 @@ function renderAnalysis() {
   const { content, footer } = createTitledPage("Recipe Analysis", "Review parsed steps before cooking", "review-screen");
 
   const summaryCard = createCard();
+  summaryCard.classList.add("analysis-card");
   const recipeTitle = document.createElement("h2");
+  recipeTitle.className = "analysis-title";
   recipeTitle.textContent = appState.recipe.title;
 
+  const metadataDebugSnapshot = getRecipeMetadataDebugSnapshot(appState.recipe);
+  console.log("[Recipe Analysis] metadata snapshot", metadataDebugSnapshot);
+
+  const metadataItems = getRecipeMetadataItems(appState.recipe);
+  const metadataList = document.createElement("dl");
+  metadataList.className = "analysis-metadata";
+
+  metadataItems.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "analysis-metadata-item";
+
+    const label = document.createElement("dt");
+    label.className = "analysis-metadata-label";
+    label.textContent = `${item.label}:`;
+
+    const value = document.createElement("dd");
+    value.className = "analysis-metadata-value";
+    value.textContent = item.value;
+
+    row.append(label, value);
+    metadataList.appendChild(row);
+  });
+
+  summaryCard.append(recipeTitle, metadataList);
+
   const summaryList = document.createElement("ul");
-  summaryList.className = "list";
+  summaryList.className = "list analysis-summary-list";
 
   const ingredientCount = document.createElement("li");
   ingredientCount.textContent = `${appState.recipe.ingredients.length} ingredients`;
@@ -2806,7 +2951,15 @@ function renderAnalysis() {
   cookingCount.textContent = `${appState.recipe.cookingSteps.length} cooking steps`;
 
   summaryList.append(ingredientCount, prepCount, cookingCount);
-  summaryCard.append(recipeTitle, summaryList);
+  summaryCard.appendChild(summaryList);
+
+  if (DEV_MODE) {
+    const debugBlock = document.createElement("pre");
+    debugBlock.className = "analysis-debug";
+    debugBlock.textContent = JSON.stringify(metadataDebugSnapshot, null, 2);
+    summaryCard.appendChild(debugBlock);
+  }
+
   content.appendChild(summaryCard);
 
   const actions = document.createElement("div");
