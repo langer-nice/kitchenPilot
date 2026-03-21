@@ -116,7 +116,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v68"; 
+const BUILD_VERSION = "DEV BUILD: v69"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -1687,12 +1687,28 @@ function advancePreparationStep() {
     appState.preparationIndex += 1;
     renderPreparation();
   } else {
-    console.log("[preparation] End of preparation reached; direct transition to cooking step screen");
-    recordVoiceDebugEvent("preparation-complete-direct-to-cooking", {
-      preparationIndex: appState.preparationIndex,
+    const screenBefore = appState.currentScreen;
+    const preparationIndexBefore = appState.preparationIndex;
+    const cookingIndexBefore = appState.cookingIndex;
+
+    console.log("[preparation] End of preparation reached; transition to cooking intro", {
+      screenBefore,
+      screenAfter: "cookingIntro",
+      preparationIndexBefore,
+      preparationIndexAfter: appState.preparationIndex,
+      cookingIndexBefore,
+      cookingIndexAfter: 0
+    });
+    recordVoiceDebugEvent("preparation-complete-to-cooking-intro", {
+      screenBefore,
+      screenAfter: "cookingIntro",
+      preparationIndexBefore,
+      preparationIndexAfter: appState.preparationIndex,
+      cookingIndexBefore,
+      cookingIndexAfter: 0,
       totalPreparationSteps: total
     });
-    enterCookingFlow();
+    setScreen("cookingIntro");
   }
 }
 
