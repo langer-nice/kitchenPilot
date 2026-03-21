@@ -218,28 +218,31 @@ body {
   text-align: center;
 }
 
-.voice-debug-panel {
-  margin-top: var(--space-3);
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: #f3f6fb;
-  text-align: left;
+.voice-debug-copy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: var(--space-2);
 }
 
-.voice-debug-panel__title {
-  margin: 0 0 8px;
-  font-size: 0.9rem;
-  font-weight: 700;
+.voice-debug-copy__button {
+  font-size: 0.82rem;
+  padding: 8px 12px;
 }
 
-.voice-debug-panel__body {
-  margin: 0;
-  font-size: 0.72rem;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  word-break: break-word;
+.voice-debug-copy__status {
+  min-height: 1em;
+  font-size: 0.78rem;
   color: var(--color-text-secondary);
+}
+
+.voice-debug-copy__status[data-state="success"] {
+  color: var(--color-secondary-hover);
+}
+
+.voice-debug-copy__status[data-state="error"] {
+  color: var(--color-danger);
 }
 
 .page-content {

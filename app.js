@@ -435,6 +435,10 @@ function clearVoiceCommandLock(reason = "") {
   });
 }
 
+function isVoiceDebugUiEnabled() {
+  return getDevModeEnabled();
+}
+
 function normalizeVoiceCommandText(text) {
   return String(text || "")
     .toLowerCase()
@@ -2689,8 +2693,8 @@ function createPageShell(screenClassName = "") {
   page.append(header, content, footer);
   appEl.appendChild(page);
 
-  if (DEV_MODE) {
-    content.appendChild(createVoiceDebugPanel());
+  if (isVoiceDebugUiEnabled()) {
+    header.appendChild(createVoiceDebugCopyButton());
   }
 
   return { page, header, content, footer };
@@ -2713,17 +2717,8 @@ function createTitledPage(title, subtitle, screenClassName = "") {
   return shell;
 }
 
-function createVoiceDebugPanel() {
-  const panel = document.createElement("section");
-  panel.className = "voice-debug-panel";
-
-  const title = document.createElement("h3");
-  title.className = "voice-debug-panel__title";
-  title.textContent = "Voice Debug";
-
-  const body = document.createElement("pre");
-  body.className = "voice-debug-panel__body";
-  body.textContent = JSON.stringify({
+function getVoiceDebugSnapshot() {
+  return {
     screen: appState.currentScreen,
     transcript: appState.voiceLastTranscript || appState.voiceHeard || "",
     matchedCommand: appState.voiceLastMatchedCommand || "",
@@ -2735,10 +2730,46 @@ function createVoiceDebugPanel() {
     commandLockReason: appState.voiceCommandLockReason || "",
     commandLockRemainingMs: getVoiceCommandLockRemainingMs(),
     recentEvents: (appState.voiceDebugEvents || []).slice(0, 5)
-  }, null, 2);
+  };
+}
 
-  panel.append(title, body);
-  return panel;
+function createVoiceDebugCopyButton() {
+  const wrap = document.createElement("div");
+  wrap.className = "voice-debug-copy";
+
+  const button = createButton("Copy voice debug", "voice-debug-copy__button", async () => {
+    const payload = JSON.stringify(getVoiceDebugSnapshot(), null, 2);
+
+    try {
+      await navigator.clipboard.writeText(payload);
+      status.textContent = "Voice debug copied";
+      status.dataset.state = "success";
+    } catch (error) {
+      console.error("Voice debug copy failed:", error);
+      status.textContent = "Copy failed";
+      status.dataset.state = "error";
+    }
+
+    if (statusTimeoutId) {
+      window.clearTimeout(statusTimeoutId);
+    }
+    statusTimeoutId = window.setTimeout(() => {
+      status.textContent = "";
+      status.dataset.state = "";
+      statusTimeoutId = null;
+    }, 1800);
+  });
+
+  button.classList.add("btn-inline");
+
+  const status = document.createElement("span");
+  status.className = "voice-debug-copy__status";
+  status.setAttribute("aria-live", "polite");
+
+  let statusTimeoutId = null;
+
+  wrap.append(button, status);
+  return wrap;
 }
 
 function createRecipeIcon(assetPath, label = "") {
@@ -3483,8 +3514,8 @@ function renderStageIntro(title, description, backScreen, continueScreen, contin
     main.appendChild(note);
   }
 
-  if (DEV_MODE) {
-    main.appendChild(createVoiceDebugPanel());
+  if (isVoiceDebugUiEnabled()) {
+    footer.appendChild(createVoiceDebugCopyButton());
   }
 
   const actions = document.createElement("div");
@@ -3540,8 +3571,8 @@ function renderIngredientsIntro() {
     readyLabel: "Voice ready"
   }));
   appendVoiceError(main);
-  if (DEV_MODE) {
-    main.appendChild(createVoiceDebugPanel());
+  if (isVoiceDebugUiEnabled()) {
+    footer.appendChild(createVoiceDebugCopyButton());
   }
 
   const actions = document.createElement("div");
@@ -3588,8 +3619,8 @@ function renderPreparationIntro() {
   header.append(title, stageLabel);
   main.append(recipeIcon, description);
   main.appendChild(createVoiceActivationCard("Voice enabled. You can say: Next, Repeat, Back."));
-  if (DEV_MODE) {
-    main.appendChild(createVoiceDebugPanel());
+  if (isVoiceDebugUiEnabled()) {
+    footer.appendChild(createVoiceDebugCopyButton());
   }
 
   const actions = document.createElement("div");
@@ -3632,8 +3663,8 @@ function renderCookingIntro() {
   header.append(title, stageLabel);
   main.append(recipeIcon);
   main.appendChild(createVoiceActivationCard("Voice enabled. You can say: Next, Repeat, Pause."));
-  if (DEV_MODE) {
-    main.appendChild(createVoiceDebugPanel());
+  if (isVoiceDebugUiEnabled()) {
+    footer.appendChild(createVoiceDebugCopyButton());
   }
 
   const actions = document.createElement("div");
