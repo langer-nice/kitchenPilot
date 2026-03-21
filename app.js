@@ -119,7 +119,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v70"; 
+const BUILD_VERSION = "DEV BUILD: v72"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -1257,9 +1257,23 @@ function classifyRecipeExecutionFlow(recipe) {
 
 function normalizeRecipeForGuidance(recipe) {
   const cloned = JSON.parse(JSON.stringify(recipe));
+  console.log("[recipe-shape] raw parsed recipe", {
+    title: cloned.title,
+    preparationSteps: cloned.preparationSteps,
+    cookingSteps: cloned.cookingSteps,
+    preparationCount: Array.isArray(cloned.preparationSteps) ? cloned.preparationSteps.length : 0,
+    cookingCount: Array.isArray(cloned.cookingSteps) ? cloned.cookingSteps.length : 0
+  });
   cloned.preparationSteps = splitPreparationActions(cloned.preparationSteps || []);
   cloned.executionFlowPrototype = classifyRecipeExecutionFlow(cloned);
   cloned.prepTaskPrototype = extractPrepTasksFromIngredients(cloned.ingredients || []);
+  console.log("[recipe-shape] normalized recipe for guidance", {
+    title: cloned.title,
+    preparationSteps: cloned.preparationSteps,
+    cookingSteps: cloned.cookingSteps,
+    preparationCount: Array.isArray(cloned.preparationSteps) ? cloned.preparationSteps.length : 0,
+    cookingCount: Array.isArray(cloned.cookingSteps) ? cloned.cookingSteps.length : 0
+  });
   return cloned;
 }
 
@@ -3418,6 +3432,13 @@ function renderHome() {
       recipe.sourceUrl = recipe.sourceUrl || recipeUrl || "";
 
       appState.recipe = recipe;
+      console.log("[recipe-shape] recipe stored in appState", {
+        title: appState.recipe.title,
+        preparationSteps: appState.recipe.preparationSteps,
+        cookingSteps: appState.recipe.cookingSteps,
+        preparationCount: Array.isArray(appState.recipe.preparationSteps) ? appState.recipe.preparationSteps.length : 0,
+        cookingCount: Array.isArray(appState.recipe.cookingSteps) ? appState.recipe.cookingSteps.length : 0
+      });
       initializeIngredientChecklist(recipe);
       appState.preparationIndex = 0;
       appState.cookingIndex = 0;

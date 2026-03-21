@@ -695,6 +695,163 @@ Recipe text:
 ${recipeText}`;
 }
 
+const DETERMINISTIC_COOKING_KEYWORDS = [
+  "preheat", "heat", "cook", "roast", "bake", "fry", "boil", "simmer", "saute", "sautee",
+  "oven", "stovetop", "gas", "fan", "degrees", "temperature", "bring to the boil",
+  "bring to a boil", "gentle boil", "reduce heat", "lower heat", "until tender",
+  "until golden", "until set", "minutes", "minute", "hours", "hour", "drain", "serve",
+  "add", "bring", "toss", "mix", "stir", "pour"
+];
+
+const DETERMINISTIC_PREP_KEYWORDS = [
+  "chop", "dice", "slice", "grate", "mince", "crush", "peel", "trim", "whisk", "roll",
+  "beat", "cut", "measure", "open", "prepare", "set out", "gather"
+];
+
+function normalizeInstructionLine(line) {
+  return normalizeWhitespace(String(line || "").replace(/^\d+[\).\s-]*/, ""));
+}
+
+function splitStructuredRecipeSections(recipeText) {
+  const normalized = String(recipeText || "").replace(/\r/g, "").trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const ingredientsMatch = normalized.match(/\bIngredients\s*:/i);
+  const instructionsMatch = normalized.match(/\b(?:Instructions|Method|Directions)\s*:/i);
+
+  if (!ingredientsMatch || !instructionsMatch || instructionsMatch.index <= ingredientsMatch.index) {
+    return null;
+  }
+
+  const title = normalizeWhitespace(normalized.slice(0, ingredientsMatch.index).split("\n").find(Boolean) || "");
+  const ingredientsText = normalized.slice(ingredientsMatch.index + ingredientsMatch[0].length, instructionsMatch.index).trim();
+  const instructionsText = normalized.slice(instructionsMatch.index + instructionsMatch[0].length).trim();
+
+  if (!title || !ingredientsText || !instructionsText) {
+    return null;
+  }
+
+  return {
+    title,
+    ingredientsText,
+    instructionsText
+  };
+}
+
+function parseStructuredIngredients(ingredientsText) {
+  return String(ingredientsText || "")
+    .split("\n")
+    .map((line) => normalizeWhitespace(line))
+    .filter(Boolean);
+}
+
+function parseStructuredInstructionLines(instructionsText) {
+  const lines = String(instructionsText || "")
+    .split("\n")
+    .map((line) => normalizeInstructionLine(line))
+    .filter(Boolean);
+
+  if (lines.length > 1) {
+    return lines;
+  }
+
+  return String(instructionsText || "")
+    .split(/(?=\d+[\).\s-])/)
+    .map((line) => normalizeInstructionLine(line))
+    .filter(Boolean);
+}
+
+function deterministicParseStepDurationSeconds(stepText) {
+  const text = String(stepText || "");
+  const hourMatch = text.match(/(\d+(?:\s*1\/2|\.\d+)?)\s*(hour|hours|hr|hrs)/i);
+  if (hourMatch) {
+    const raw = hourMatch[1].replace(/\s+/g, "");
+    const hours = raw.includes("1/2") ? Number.parseInt(raw, 10) + 0.5 : Number.parseFloat(raw);
+    if (Number.isFinite(hours)) {
+      return Math.round(hours * 60 * 60);
+    }
+  }
+
+  const minuteMatch = text.match(/(\d+)\s*(minute|minutes|min|mins)/i);
+  if (minuteMatch) {
+    const minutes = Number.parseInt(minuteMatch[1], 10);
+    if (Number.isFinite(minutes)) {
+      return minutes * 60;
+    }
+  }
+
+  const secondMatch = text.match(/(\d+)\s*(second|seconds|sec|secs)/i);
+  if (secondMatch) {
+    const seconds = Number.parseInt(secondMatch[1], 10);
+    if (Number.isFinite(seconds)) {
+      return seconds;
+    }
+  }
+
+  return null;
+}
+
+function isDeterministicCookingStep(stepText) {
+  const normalized = normalizeWhitespace(String(stepText || "").toLowerCase());
+  return DETERMINISTIC_COOKING_KEYWORDS.some((keyword) => normalized.includes(keyword));
+}
+
+function isDeterministicPrepStep(stepText) {
+  const normalized = normalizeWhitespace(String(stepText || "").toLowerCase());
+  return DETERMINISTIC_PREP_KEYWORDS.some((keyword) => normalized.includes(keyword));
+}
+
+function deterministicParseRecipeText(recipeText) {
+  const sections = splitStructuredRecipeSections(recipeText);
+  if (!sections) {
+    return null;
+  }
+
+  const ingredients = parseStructuredIngredients(sections.ingredientsText);
+  const rawInstructionSteps = parseStructuredInstructionLines(sections.instructionsText);
+  if (!ingredients.length || !rawInstructionSteps.length) {
+    return null;
+  }
+
+  const preparationSteps = [];
+  const cookingSteps = [];
+
+  rawInstructionSteps.forEach((stepText) => {
+    const normalized = normalizeWhitespace(stepText);
+    if (!normalized) {
+      return;
+    }
+
+    if (isDeterministicPrepStep(normalized) && !isDeterministicCookingStep(normalized)) {
+      preparationSteps.push(normalized);
+      return;
+    }
+
+    const timerSeconds = deterministicParseStepDurationSeconds(normalized);
+    cookingSteps.push(timerSeconds ? { text: normalized, timerSeconds } : { text: normalized });
+  });
+
+  const parsed = {
+    title: sections.title,
+    ingredients,
+    preparationSteps,
+    cookingSteps
+  };
+
+  console.log("[api/parse-recipe] Deterministic parser output", {
+    title: parsed.title,
+    rawInstructionSteps,
+    preparationSteps: parsed.preparationSteps,
+    cookingSteps: parsed.cookingSteps,
+    preparationCount: parsed.preparationSteps.length,
+    cookingCount: parsed.cookingSteps.length
+  });
+
+  return parsed;
+}
+
 async function parseWithOpenAI(recipeText) {
   const apiKey = process.env.OPENAI_API_KEY;
 
@@ -807,8 +964,17 @@ async function handler(req, res) {
       });
     }
 
-    const parsedRecipe = await parseWithOpenAI(recipeSourceText);
+    const deterministicRecipe = deterministicParseRecipeText(recipeSourceText);
+    const parsedRecipe = deterministicRecipe || await parseWithOpenAI(recipeSourceText);
     const finalRecipe = mergeRecipeMetadata(parsedRecipe, extractedMetadata);
+    console.log("[api/parse-recipe] Final structured recipe", {
+      parserStrategy: deterministicRecipe ? "deterministic_plain_text" : "openai",
+      title: finalRecipe.title,
+      preparationSteps: finalRecipe.preparationSteps,
+      cookingSteps: finalRecipe.cookingSteps,
+      preparationCount: Array.isArray(finalRecipe.preparationSteps) ? finalRecipe.preparationSteps.length : 0,
+      cookingCount: Array.isArray(finalRecipe.cookingSteps) ? finalRecipe.cookingSteps.length : 0
+    });
     console.log("[api/parse-recipe] Final metadata fields", omitUndefinedValues({
       prepTime: finalRecipe.prepTime,
       prepTimeMinutes: finalRecipe.prepTimeMinutes,
