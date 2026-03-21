@@ -116,7 +116,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v64"; 
+const BUILD_VERSION = "DEV BUILD: v65"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -1686,7 +1686,16 @@ function advancePreparationStep() {
   if (appState.preparationIndex < total - 1) {
     appState.preparationIndex += 1;
     renderPreparation();
+  } else if (appState.preparationIndex === total - 1) {
+    appState.preparationIndex = total;
+    console.log("[preparation] Reached end of preparation; waiting for explicit continue");
+    recordVoiceDebugEvent("preparation-complete-awaiting-confirmation", {
+      preparationIndex: appState.preparationIndex,
+      totalPreparationSteps: total
+    });
+    renderPreparation();
   } else {
+    console.log("[preparation] Leaving completion state for cooking intro");
     setScreen("cookingIntro");
   }
 }
@@ -3774,7 +3783,41 @@ function renderPreparation() {
   }
 
   const idx = appState.preparationIndex;
-  const currentText = appState.recipe.preparationSteps[idx];
+  const isPreparationComplete = idx >= total;
+  const currentText = isPreparationComplete ? "" : appState.recipe.preparationSteps[idx];
+
+  if (isPreparationComplete) {
+    const { content, footer } = createTitledPage("Preparation", "Preparation complete", "page-shell--guided preparation-screen");
+    content.appendChild(createVoiceIndicatorBar("preparation"));
+    appendVoiceError(content);
+
+    const card = createCard();
+    const message = document.createElement("p");
+    message.className = "step-text";
+    message.textContent = "All preparation steps are done. Say Next or tap Continue when you are ready to start cooking.";
+    card.appendChild(message);
+    content.appendChild(card);
+
+    const primaryRow = document.createElement("div");
+    primaryRow.className = "action-row cooking-actions primary-actions";
+    primaryRow.append(
+      createButton("Continue", "primary btn-next", () => {
+        advancePreparationStep();
+      }, "next")
+    );
+
+    const secondaryRow = document.createElement("div");
+    secondaryRow.className = "action-row secondary-actions";
+    secondaryRow.append(
+      createButton("Back", "ghost-action", () => {
+        appState.preparationIndex = Math.max(0, total - 1);
+        renderPreparation();
+      }, "back")
+    );
+
+    footer.append(primaryRow, secondaryRow);
+    return;
+  }
 
   const { content, footer } = createTitledPage("Preparation", `Preparation ${idx + 1} of ${total}`, "page-shell--guided preparation-screen");
   content.appendChild(createVoiceIndicatorBar("preparation"));
