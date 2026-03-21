@@ -803,6 +803,52 @@ function isDeterministicPrepStep(stepText) {
   return DETERMINISTIC_PREP_KEYWORDS.some((keyword) => normalized.includes(keyword));
 }
 
+function buildDeterministicIngredientPrepSteps(ingredients, instructionSteps) {
+  const prepSteps = [];
+  const seen = new Set();
+  const normalizedInstructions = (Array.isArray(instructionSteps) ? instructionSteps : [])
+    .map((step) => normalizeWhitespace(String(step || "").toLowerCase()));
+
+  function pushPrepStep(stepText) {
+    const normalized = normalizeWhitespace(stepText);
+    if (!normalized) {
+      return;
+    }
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    prepSteps.push(normalized);
+  }
+
+  (Array.isArray(ingredients) ? ingredients : []).forEach((ingredientText) => {
+    const ingredient = normalizeWhitespace(String(ingredientText || ""));
+    const normalizedIngredient = ingredient.toLowerCase();
+
+    if (!normalizedIngredient) {
+      return;
+    }
+
+    if (/\bgarlic\b/.test(normalizedIngredient)) {
+      if (normalizedInstructions.some((step) => /\bsliced garlic\b/.test(step))) {
+        pushPrepStep("Slice the garlic");
+      } else if (normalizedInstructions.some((step) => /\bminced garlic\b/.test(step))) {
+        pushPrepStep("Mince the garlic");
+      } else {
+        pushPrepStep("Prepare the garlic");
+      }
+      return;
+    }
+
+    if (/\bparsley\b/.test(normalizedIngredient)) {
+      pushPrepStep(/\boptional\b/.test(normalizedIngredient) ? "Chop the parsley (optional)" : "Chop the parsley");
+    }
+  });
+
+  return prepSteps;
+}
+
 function deterministicParseRecipeText(recipeText) {
   const sections = splitStructuredRecipeSections(recipeText);
   if (!sections) {
@@ -817,6 +863,11 @@ function deterministicParseRecipeText(recipeText) {
 
   const preparationSteps = [];
   const cookingSteps = [];
+  const inferredPreparationSteps = buildDeterministicIngredientPrepSteps(ingredients, rawInstructionSteps);
+
+  inferredPreparationSteps.forEach((step) => {
+    preparationSteps.push(step);
+  });
 
   rawInstructionSteps.forEach((stepText) => {
     const normalized = normalizeWhitespace(stepText);
