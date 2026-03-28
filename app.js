@@ -33,6 +33,11 @@ const appState = {
   voiceLastAcceptedCommandScreen: "",
   voiceLastAcceptedCommandTranscript: "",
   voiceScreenEnteredAt: 0,
+  voiceLastRecognitionStartAt: 0,
+  voiceLastRecognitionEndAt: 0,
+  voiceLastRecognitionRestartRequestAt: 0,
+  voiceLastAppSpeechStartAt: 0,
+  voiceLastAppSpeechEndAt: 0,
   voicePreparationStepEnteredAt: 0,
   voicePreparationAcceptCommandsAt: 0,
   voiceCommandLockUntil: 0,
@@ -123,7 +128,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v75"; 
+const BUILD_VERSION = "DEV BUILD: v76"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -379,6 +384,13 @@ function getMsSinceScreenEnter(referenceTime = getVoiceTimestamp()) {
   return roundVoiceTiming(referenceTime - appState.voiceScreenEnteredAt);
 }
 
+function getMsSinceCookingIntroEnter(referenceTime = getVoiceTimestamp(), screenName = appState.currentScreen) {
+  if (screenName !== "cookingIntro") {
+    return null;
+  }
+  return getMsSinceScreenEnter(referenceTime);
+}
+
 function logVoiceTiming(stage, details = {}) {
   console.log(`[voice-timing] ${stage}`, {
     ...details,
@@ -441,6 +453,20 @@ function recordScreenEntryDebugEvent(screenName, payload = {}) {
   recordVoiceDebugEvent(`entered-${screenName}`, {
     screenName,
     at: getDebugTimestampIso(),
+    ...payload
+  });
+}
+
+function recordCookingIntroDebugEvent(type, payload = {}, options = {}) {
+  const referenceTime = Number.isFinite(options.referenceTime) ? options.referenceTime : getVoiceTimestamp();
+  const effectiveScreen = options.screenName || appState.currentScreen;
+  const isCookingIntroEvent = effectiveScreen === "cookingIntro";
+  if (!isCookingIntroEvent) {
+    return;
+  }
+
+  recordVoiceDebugEvent(type, {
+    msSinceCookingIntroEnter: getMsSinceCookingIntroEnter(referenceTime, effectiveScreen),
     ...payload
   });
 }
@@ -536,6 +562,22 @@ function shouldSuppressDuplicateVoiceCommand(commandKey, transcript) {
       normalizedTranscript,
       msSinceScreenEnter: getMsSinceScreenEnter(now)
     });
+    recordCookingIntroDebugEvent("cookingIntro-stale-transcript-ignored", {
+      commandKey,
+      transcript,
+      normalizedTranscript,
+      reason: "duplicate-suppressed"
+    }, {
+      referenceTime: now
+    });
+    recordCookingIntroDebugEvent("cookingIntro-command-ignored", {
+      commandKey,
+      transcript,
+      normalizedTranscript,
+      reason: "duplicate-suppressed"
+    }, {
+      referenceTime: now
+    });
     return true;
   }
 
@@ -566,6 +608,14 @@ function logVoiceTranscriptArrival(transcript, options = {}) {
     source: options.source || "unknown",
     isFinal: Boolean(options.isFinal),
     speechEndToTranscriptMs: roundVoiceTiming(speechEndToTranscriptMs)
+  });
+  recordCookingIntroDebugEvent("transcript-received", {
+    transcript,
+    source: options.source || "unknown",
+    isFinal: Boolean(options.isFinal),
+    speechEndToTranscriptMs: roundVoiceTiming(speechEndToTranscriptMs)
+  }, {
+    referenceTime: now
   });
 
   return {
@@ -614,6 +664,24 @@ function shouldIgnorePreparationTranscript(transcript, timing = {}) {
       isFinal: Boolean(timing.isFinal),
       msSinceScreenEnter: getMsSinceScreenEnter(now),
       ignoredUntilMs: roundVoiceTiming(gateUntil - now)
+    });
+    recordCookingIntroDebugEvent("stale transcript ignored", {
+      transcript,
+      reason: "stale",
+      source: timing.source || "unknown",
+      isFinal: Boolean(timing.isFinal),
+      ignoredUntilMs: roundVoiceTiming(gateUntil - now)
+    }, {
+      referenceTime: now
+    });
+    recordCookingIntroDebugEvent("cookingIntro-command-ignored", {
+      transcript,
+      reason: "stale",
+      source: timing.source || "unknown",
+      isFinal: Boolean(timing.isFinal),
+      ignoredUntilMs: roundVoiceTiming(gateUntil - now)
+    }, {
+      referenceTime: now
     });
     return "stale";
   }
@@ -1030,6 +1098,17 @@ function setScreen(screenName) {
     msSinceAcceptedVoiceCommand: lastAcceptedCommandAt ? roundVoiceTiming(enteredAt - lastAcceptedCommandAt) : null,
     lastAcceptedCommandTranscript: appState.voiceLastAcceptedCommandTranscript || "",
     lastAcceptedCommandScreen: appState.voiceLastAcceptedCommandScreen || ""
+  });
+  recordCookingIntroDebugEvent("entered-cookingIntro", {
+    previousScreen,
+    freshVoiceCommandForTransition,
+    lastAcceptedCommandAt: roundVoiceTiming(lastAcceptedCommandAt),
+    msSinceAcceptedVoiceCommand: lastAcceptedCommandAt ? roundVoiceTiming(enteredAt - lastAcceptedCommandAt) : null,
+    lastAcceptedCommandTranscript: appState.voiceLastAcceptedCommandTranscript || "",
+    lastAcceptedCommandScreen: appState.voiceLastAcceptedCommandScreen || ""
+  }, {
+    referenceTime: enteredAt,
+    screenName
   });
 
   if (previousScreen === "preparation" && screenName !== "preparation") {
@@ -1857,7 +1936,7 @@ function advancePreparationStep() {
     appState.preparationIndex += 1;
     renderPreparation();
   } else {
-    recordAutoFlowDebugEvent("auto-advance-preparation-to-cookingIntro", {
+    recordAutoFlowDebugEvent("transition-preparation-complete-to-cookingIntro", {
       trigger: "advancePreparationStep:end-of-preparation",
       preparationIndex: appState.preparationIndex,
       totalPreparationSteps: total
@@ -2027,10 +2106,75 @@ function skipTimerAndAdvance() {
   goToNextCookingStep();
 }
 
-function enterCookingFlow() {
+function enterCookingFlow(context = {}) {
   const screenBefore = appState.currentScreen;
   const cookingIndexBefore = appState.cookingIndex;
   const timerBefore = getVoiceTimerSnapshot();
+  const now = getVoiceTimestamp();
+  const currentScreenIsCookingIntro = screenBefore === "cookingIntro";
+  const triggerSource = context.source || "unknown";
+  const hasFreshCommand = Boolean(
+    currentScreenIsCookingIntro &&
+    Number.isFinite(appState.voiceLastAcceptedCommandAt) &&
+    appState.voiceLastAcceptedCommandAt >= appState.voiceScreenEnteredAt
+  );
+
+  if (currentScreenIsCookingIntro) {
+    recordCookingIntroDebugEvent("cookingIntro-start-cooking-called", {
+      triggerSource,
+      triggerDetail: context.triggerDetail || "",
+      freshCommandForCookingIntro: hasFreshCommand,
+      acceptedCommandTranscript: appState.voiceLastAcceptedCommandTranscript || "",
+      acceptedCommandScreen: appState.voiceLastAcceptedCommandScreen || "",
+      msSinceAcceptedCommand: Number(appState.voiceLastAcceptedCommandAt || 0)
+        ? roundVoiceTiming(now - appState.voiceLastAcceptedCommandAt)
+        : null,
+      msSinceLastTranscript: Number(appState.voiceLastTranscriptAt || 0)
+        ? roundVoiceTiming(now - appState.voiceLastTranscriptAt)
+        : null,
+      msSinceRecognitionStart: Number(appState.voiceLastRecognitionStartAt || 0)
+        ? roundVoiceTiming(now - appState.voiceLastRecognitionStartAt)
+        : null,
+      msSinceRecognitionEnd: Number(appState.voiceLastRecognitionEndAt || 0)
+        ? roundVoiceTiming(now - appState.voiceLastRecognitionEndAt)
+        : null,
+      msSinceRecognitionRestartRequest: Number(appState.voiceLastRecognitionRestartRequestAt || 0)
+        ? roundVoiceTiming(now - appState.voiceLastRecognitionRestartRequestAt)
+        : null,
+      msSinceAppSpeechStart: Number(appState.voiceLastAppSpeechStartAt || 0)
+        ? roundVoiceTiming(now - appState.voiceLastAppSpeechStartAt)
+        : null,
+      msSinceAppSpeechEnd: Number(appState.voiceLastAppSpeechEndAt || 0)
+        ? roundVoiceTiming(now - appState.voiceLastAppSpeechEndAt)
+        : null,
+      voiceListening: appState.voiceListening,
+      voiceOutputSpeaking: appState.voiceOutputSpeaking,
+      timerStatus: appState.timerStatus
+    }, {
+      referenceTime: now
+    });
+
+    if (!hasFreshCommand || triggerSource !== "voice-next") {
+      recordCookingIntroDebugEvent("cookingIntro-auto-start-triggered", {
+        triggerSource,
+        triggerDetail: context.triggerDetail || "",
+        freshCommandForCookingIntro: hasFreshCommand,
+        acceptedCommandTranscript: appState.voiceLastAcceptedCommandTranscript || "",
+        acceptedCommandScreen: appState.voiceLastAcceptedCommandScreen || "",
+        msSinceAcceptedCommand: Number(appState.voiceLastAcceptedCommandAt || 0)
+          ? roundVoiceTiming(now - appState.voiceLastAcceptedCommandAt)
+          : null,
+        msSinceLastTranscript: Number(appState.voiceLastTranscriptAt || 0)
+          ? roundVoiceTiming(now - appState.voiceLastTranscriptAt)
+          : null,
+        msSinceRecognitionRestartRequest: Number(appState.voiceLastRecognitionRestartRequestAt || 0)
+          ? roundVoiceTiming(now - appState.voiceLastRecognitionRestartRequestAt)
+          : null
+      }, {
+        referenceTime: now
+      });
+    }
+  }
 
   appState.cookingIndex = 0;
   appState.activeTimerSeconds = null;
@@ -2106,6 +2250,14 @@ function handleVoiceCommand(commandText, options = {}) {
       msSinceScreenEnter: getMsSinceScreenEnter(timing.matchedAt),
       acceptedOnScreen: appState.currentScreen
     });
+    recordCookingIntroDebugEvent("cookingIntro-command-accepted", {
+      commandKey,
+      transcript: commandText,
+      normalizedTranscript: command,
+      acceptedOnScreen: appState.currentScreen
+    }, {
+      referenceTime: timing.matchedAt
+    });
     logVoiceCommandMatch(commandKey, commandText, timing);
   }
 
@@ -2147,7 +2299,10 @@ function handleVoiceCommand(commandText, options = {}) {
       matchCommand("next");
       setVoiceCommandLock("cookingIntro:next");
       runVoiceAction("next", "Start Cooking", () => {
-        enterCookingFlow();
+        enterCookingFlow({
+          source: "voice-next",
+          triggerDetail: "cookingIntro-command-accepted"
+        });
       }, 0, timing);
       return;
     }
@@ -2233,6 +2388,11 @@ function handleVoiceCommand(commandText, options = {}) {
     normalizedTranscript: command,
     reason: "invalid-command",
     msSinceScreenEnter: getMsSinceScreenEnter()
+  });
+  recordCookingIntroDebugEvent("cookingIntro-command-ignored", {
+    transcript: commandText,
+    normalizedTranscript: command,
+    reason: "invalid-command"
   });
   recordVoiceDebugEvent("command-invalid", {
     transcript: commandText,
@@ -2326,8 +2486,15 @@ function startVoiceCommands() {
       if (!appState.voiceEnabled) {
         return;
       }
+      appState.voiceLastRecognitionStartAt = getVoiceTimestamp();
       logVoiceTiming("recognition-started", {
         screen: appState.currentScreen
+      });
+      recordCookingIntroDebugEvent("recognition-start", {
+        voiceEnabled: appState.voiceEnabled,
+        voiceListeningBeforeStart: appState.voiceListening
+      }, {
+        referenceTime: appState.voiceLastRecognitionStartAt
       });
       recordPreparationVoiceDebugEvent("recognition-start", {
         screen: appState.currentScreen
@@ -2352,9 +2519,16 @@ function startVoiceCommands() {
     };
 
     voiceRecognition.onend = () => {
+      appState.voiceLastRecognitionEndAt = getVoiceTimestamp();
       logVoiceTiming("recognition-ended", {
         voiceEnabled: appState.voiceEnabled,
         screen: appState.currentScreen
+      });
+      recordCookingIntroDebugEvent("recognition-end", {
+        voiceEnabled: appState.voiceEnabled,
+        willAttemptRestart: Boolean(appState.voiceEnabled && isGuidanceScreen(appState.currentScreen))
+      }, {
+        referenceTime: appState.voiceLastRecognitionEndAt
       });
       recordPreparationVoiceDebugEvent("recognition-end", {
         screen: appState.currentScreen,
@@ -2363,6 +2537,7 @@ function startVoiceCommands() {
       appState.voiceListening = false;
       clearVoiceRecognitionActivity();
       if (appState.voiceEnabled && isGuidanceScreen(appState.currentScreen)) {
+        appState.voiceLastRecognitionRestartRequestAt = getVoiceTimestamp();
         setVoiceCommandStatus("Listening...", 0);
         try {
           voiceRecognition.start();
@@ -3777,7 +3952,10 @@ function renderCookingIntro() {
   actions.append(
     createButton("Home", "secondary-action", () => setScreen("home"), "home"),
     createButton("Back", "secondary-action", () => openPreparationIntro(), "back"),
-    createButton("Next", "primary primary-action", () => enterCookingFlow(), "next")
+    createButton("Next", "primary primary-action", () => enterCookingFlow({
+      source: "button-next",
+      triggerDetail: "cookingIntro-primary-button"
+    }), "next")
   );
 
   footer.appendChild(actions);
@@ -4336,6 +4514,12 @@ window.addEventListener("keydown", (event) => {
 });
 
 window.addEventListener("kitchenpilot:voice-speech-start", () => {
+  appState.voiceLastAppSpeechStartAt = getVoiceTimestamp();
+  recordCookingIntroDebugEvent("app-speech-start", {
+    voiceOutputSpeakingBeforeStart: appState.voiceOutputSpeaking
+  }, {
+    referenceTime: appState.voiceLastAppSpeechStartAt
+  });
   if (isPreparationVoiceScreen()) {
     appState.voicePreparationAcceptCommandsAt = Number.POSITIVE_INFINITY;
     recordPreparationVoiceDebugEvent("app-speech-start", {
@@ -4347,6 +4531,12 @@ window.addEventListener("kitchenpilot:voice-speech-start", () => {
 });
 
 window.addEventListener("kitchenpilot:voice-speech-end", () => {
+  appState.voiceLastAppSpeechEndAt = getVoiceTimestamp();
+  recordCookingIntroDebugEvent("app-speech-end", {
+    voiceOutputSpeakingBeforeEnd: appState.voiceOutputSpeaking
+  }, {
+    referenceTime: appState.voiceLastAppSpeechEndAt
+  });
   if (isPreparationVoiceScreen()) {
     const now = getVoiceTimestamp();
     appState.voicePreparationAcceptCommandsAt = now + 450;
