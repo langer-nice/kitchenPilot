@@ -38,7 +38,7 @@ const appState = {
   voiceLastRecognitionRestartRequestAt: 0,
   voiceLastAppSpeechStartAt: 0,
   voiceLastAppSpeechEndAt: 0,
-  voiceCookingIntroAcceptCommandsAt: 0,
+  voiceIntroAcceptCommandsAt: 0,
   voicePreparationStepEnteredAt: 0,
   voicePreparationAcceptCommandsAt: 0,
   voiceCommandLockUntil: 0,
@@ -129,7 +129,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v78"; 
+const BUILD_VERSION = "DEV BUILD: v79"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -942,6 +942,12 @@ function isGuidanceScreen(screenName) {
     screenName === "cookingIntro";
 }
 
+function isIntroScreen(screenName = appState.currentScreen) {
+  return screenName === "ingredientsIntro" ||
+    screenName === "preparationIntro" ||
+    screenName === "cookingIntro";
+}
+
 function formatTime(totalSeconds) {
   const safe = Math.max(0, Number(totalSeconds) || 0);
   const mins = Math.floor(safe / 60).toString().padStart(2, "0");
@@ -1086,8 +1092,8 @@ function setScreen(screenName) {
   clearOnboardingDemoLoop();
   resetVoiceActivityState();
   clearDeferredPreparationSpeech();
-  if (screenName !== "cookingIntro") {
-    appState.voiceCookingIntroAcceptCommandsAt = 0;
+  if (!isIntroScreen(screenName)) {
+    appState.voiceIntroAcceptCommandsAt = 0;
   }
   if (screenName !== "preparation") {
     appState.voicePreparationStepEnteredAt = 0;
@@ -1137,8 +1143,9 @@ function setScreen(screenName) {
     });
   }
 
-  if (screenName === "cookingIntro") {
+  if (isIntroScreen(screenName)) {
     const carriedOverCommandState = {
+      introScreen: screenName,
       voiceLastTranscript: appState.voiceLastTranscript || "",
       voiceLastMatchedCommand: appState.voiceLastMatchedCommand || "",
       voiceLastAction: appState.voiceLastAction || "",
@@ -1156,13 +1163,23 @@ function setScreen(screenName) {
     appState.voiceLastAcceptedCommandTranscript = "";
     appState.voiceHeard = "";
     appState.voiceExecuting = false;
-    appState.voiceCookingIntroAcceptCommandsAt = enteredAt + 450;
+    appState.voiceIntroAcceptCommandsAt = enteredAt + 450;
     lastVoiceHandledCommand = {
       key: "",
       transcript: "",
       at: 0
     };
 
+    recordVoiceDebugEvent("intro-entered", {
+      introScreen: screenName,
+      previousScreen,
+      freshVoiceCommandForTransition,
+      acceptCommandsAfterMs: 450
+    });
+    recordVoiceDebugEvent("cookingIntro-stale-command-cleared", {
+      ...carriedOverCommandState,
+      acceptCommandsAfterMs: 450
+    });
     recordCookingIntroDebugEvent("cookingIntro-stale-command-cleared", {
       ...carriedOverCommandState,
       acceptCommandsAfterMs: 450
@@ -2293,19 +2310,32 @@ function enterCookingFlow(context = {}) {
   });
 }
 
-function shouldIgnoreCookingIntroCommand(commandText, timing = {}) {
-  if (appState.currentScreen !== "cookingIntro") {
+function shouldIgnoreIntroCommand(commandText, timing = {}) {
+  if (!isIntroScreen(appState.currentScreen)) {
     return false;
   }
 
   const transcriptReceivedAt = Number.isFinite(timing.transcriptReceivedAt)
     ? timing.transcriptReceivedAt
     : getVoiceTimestamp();
-  const acceptAt = Number(appState.voiceCookingIntroAcceptCommandsAt || 0);
+  const acceptAt = Number(appState.voiceIntroAcceptCommandsAt || 0);
   if (!acceptAt || transcriptReceivedAt >= acceptAt) {
     return false;
   }
 
+  recordVoiceDebugEvent("intro-auto-advance-blocked", {
+    introScreen: appState.currentScreen,
+    transcript: commandText,
+    normalizedTranscript: normalizeVoiceCommandText(commandText),
+    reason: "received-before-intro-freshness-gate",
+    ignoredUntilMs: roundVoiceTiming(acceptAt - transcriptReceivedAt)
+  });
+  recordVoiceDebugEvent("cookingIntro-command-ignored-as-carried-over", {
+    transcript: commandText,
+    normalizedTranscript: normalizeVoiceCommandText(commandText),
+    reason: "received-before-intro-freshness-gate",
+    ignoredUntilMs: roundVoiceTiming(acceptAt - transcriptReceivedAt)
+  });
   recordCookingIntroDebugEvent("cookingIntro-command-ignored-as-carried-over", {
     transcript: commandText,
     normalizedTranscript: normalizeVoiceCommandText(commandText),
@@ -2336,7 +2366,7 @@ function handleVoiceCommand(commandText, options = {}) {
     matchedAt: null
   };
 
-  if (shouldIgnoreCookingIntroCommand(commandText, timing)) {
+  if (shouldIgnoreIntroCommand(commandText, timing)) {
     return;
   }
 
@@ -2379,6 +2409,13 @@ function handleVoiceCommand(commandText, options = {}) {
       msSinceScreenEnter: getMsSinceScreenEnter(timing.matchedAt),
       acceptedOnScreen: appState.currentScreen
     });
+    if (isIntroScreen(appState.currentScreen) && commandKey === "next") {
+      recordVoiceDebugEvent("intro-advance-triggered-by-fresh-voice-command", {
+        introScreen: appState.currentScreen,
+        transcript: commandText,
+        normalizedTranscript: command
+      });
+    }
     recordCookingIntroDebugEvent("cookingIntro-command-accepted", {
       commandKey,
       transcript: commandText,
@@ -3998,7 +4035,13 @@ function renderIngredientsIntro() {
   actions.append(
     createButton("Home", "secondary-action", () => setScreen("home"), "home"),
     createButton("Back", "secondary-action", () => setScreen("analysis"), "back"),
-    createButton("Next", "primary primary-action", () => setScreen("ingredients"), "next")
+    createButton("Next", "primary primary-action", () => {
+      recordVoiceDebugEvent("intro-advance-triggered-by-click", {
+        introScreen: "ingredientsIntro",
+        triggerAction: "primary-button"
+      });
+      setScreen("ingredients");
+    }, "next")
   );
 
   footer.appendChild(actions);
@@ -4046,7 +4089,13 @@ function renderPreparationIntro() {
   actions.append(
     createButton("Home", "secondary-action", () => setScreen("home"), "home"),
     createButton("Back", "secondary-action", () => setScreen("ingredients"), "back"),
-    createButton("Next", "primary primary-action", () => startPreparationFlow(), "next")
+    createButton("Next", "primary primary-action", () => {
+      recordVoiceDebugEvent("intro-advance-triggered-by-click", {
+        introScreen: "preparationIntro",
+        triggerAction: "primary-button"
+      });
+      startPreparationFlow();
+    }, "next")
   );
 
   footer.appendChild(actions);
@@ -4090,10 +4139,16 @@ function renderCookingIntro() {
   actions.append(
     createButton("Home", "secondary-action", () => setScreen("home"), "home"),
     createButton("Back", "secondary-action", () => openPreparationIntro(), "back"),
-    createButton("Next", "primary primary-action", () => enterCookingFlow({
-      source: "button-next",
-      triggerDetail: "cookingIntro-primary-button"
-    }), "next")
+    createButton("Next", "primary primary-action", () => {
+      recordVoiceDebugEvent("intro-advance-triggered-by-click", {
+        introScreen: "cookingIntro",
+        triggerAction: "primary-button"
+      });
+      enterCookingFlow({
+        source: "button-next",
+        triggerDetail: "cookingIntro-primary-button"
+      });
+    }, "next")
   );
 
   footer.appendChild(actions);
