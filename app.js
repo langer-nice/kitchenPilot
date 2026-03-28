@@ -19,6 +19,7 @@ const appState = {
   voiceUnlocked: false,
   voiceListening: false,
   voiceUserSpeaking: false,
+  voiceUserSpeechSessionId: 0,
   voiceOutputSpeaking: false,
   voiceErrorMessage: "",
   voiceHeard: "",
@@ -54,6 +55,9 @@ const appState = {
   speechInterrupted: false,
   lastCookingNextTriggerSource: "",
   lastCookingNextTriggerAt: 0,
+  lastConsumedCookingCommandAt: 0,
+  lastConsumedCookingCommandSessionId: 0,
+  lastConsumedCookingCommandTranscript: "",
   lastSpokenPreparationIndex: null,
   lastSpokenCookingIndex: null,
   voiceHintMessage: "",
@@ -139,7 +143,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v88"; 
+const BUILD_VERSION = "DEV BUILD: v89"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -487,6 +491,95 @@ function recordCookingDebugEvent(type, payload = {}) {
 
   appState.cookingDebugEvents = [entry, ...(appState.cookingDebugEvents || [])].slice(0, 20);
   console.log("[cooking-debug]", entry);
+}
+
+function consumeCookingCommand(commandText, timing = {}) {
+  const consumedAt = Number.isFinite(timing.matchedAt)
+    ? timing.matchedAt
+    : (Number.isFinite(timing.transcriptReceivedAt) ? timing.transcriptReceivedAt : getVoiceTimestamp());
+  appState.lastConsumedCookingCommandAt = consumedAt;
+  appState.lastConsumedCookingCommandSessionId = Number(appState.voiceUserSpeechSessionId || 0);
+  appState.lastConsumedCookingCommandTranscript = normalizeVoiceCommandText(commandText);
+  recordCookingDebugEvent("cooking-command-consumed", {
+    transcript: commandText,
+    normalizedTranscript: appState.lastConsumedCookingCommandTranscript,
+    consumedAt,
+    speechSessionId: appState.lastConsumedCookingCommandSessionId
+  });
+}
+
+function shouldAllowCookingNextCommand(commandText, timing = {}) {
+  if (!(appState.currentScreen === "cooking" || appState.currentScreen === "timerActive")) {
+    return true;
+  }
+
+  const normalizedTranscript = normalizeVoiceCommandText(commandText);
+  const transcriptAt = Number.isFinite(timing.transcriptReceivedAt) ? timing.transcriptReceivedAt : getVoiceTimestamp();
+  const currentSpeechSessionId = Number(appState.voiceUserSpeechSessionId || 0);
+
+  if (appState.voiceOutputSpeaking) {
+    recordCookingDebugEvent("cooking-command-rejected-because-speaking", {
+      transcript: commandText,
+      normalizedTranscript,
+      speechSessionId: currentSpeechSessionId
+    });
+    recordCookingDebugEvent("cooking-step-advance-blocked", {
+      source: "voice-next",
+      reason: "speaking",
+      transcript: commandText,
+      normalizedTranscript
+    });
+    return false;
+  }
+
+  if (
+    normalizedTranscript === appState.lastConsumedCookingCommandTranscript &&
+    currentSpeechSessionId !== 0 &&
+    currentSpeechSessionId === Number(appState.lastConsumedCookingCommandSessionId || 0)
+  ) {
+    recordCookingDebugEvent("cooking-command-rejected-as-already-used", {
+      transcript: commandText,
+      normalizedTranscript,
+      speechSessionId: currentSpeechSessionId,
+      lastConsumedAt: appState.lastConsumedCookingCommandAt || null
+    });
+    recordCookingDebugEvent("cooking-step-advance-blocked", {
+      source: "voice-next",
+      reason: "already-used",
+      transcript: commandText,
+      normalizedTranscript
+    });
+    return false;
+  }
+
+  if (
+    normalizedTranscript === appState.lastConsumedCookingCommandTranscript &&
+    Number(appState.lastConsumedCookingCommandAt || 0) &&
+    transcriptAt <= Number(appState.lastConsumedCookingCommandAt || 0)
+  ) {
+    recordCookingDebugEvent("cooking-command-rejected-as-stale", {
+      transcript: commandText,
+      normalizedTranscript,
+      transcriptAt,
+      lastConsumedAt: appState.lastConsumedCookingCommandAt || null
+    });
+    recordCookingDebugEvent("cooking-step-advance-blocked", {
+      source: "voice-next",
+      reason: "stale",
+      transcript: commandText,
+      normalizedTranscript
+    });
+    return false;
+  }
+
+  recordCookingDebugEvent("cooking-step-advance-allowed", {
+    source: "voice-next",
+    transcript: commandText,
+    normalizedTranscript,
+    transcriptAt,
+    speechSessionId: currentSpeechSessionId
+  });
+  return true;
 }
 
 function recordScreenEntryDebugEvent(screenName, payload = {}) {
@@ -2900,7 +2993,11 @@ function handleVoiceCommand(commandText, options = {}) {
       return;
     }
 
+    if (!shouldAllowCookingNextCommand(commandText, timing)) {
+      return;
+    }
     matchCommand("next");
+    consumeCookingCommand(commandText, timing);
     appState.lastCookingNextTriggerSource = "voice-next";
     appState.lastCookingNextTriggerAt = timing.matchedAt || getVoiceTimestamp();
     setVoiceCommandLock("cooking:next");
@@ -3077,6 +3174,7 @@ function startVoiceCommands() {
       if (!appState.voiceEnabled) {
         return;
       }
+      appState.voiceUserSpeechSessionId += 1;
       setVoiceRecognitionActivity(true);
     };
 
