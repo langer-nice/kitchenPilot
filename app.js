@@ -2184,6 +2184,14 @@ function startPreparationFlow() {
       introScreenName: "preparationIntro",
       source: "blocked-auto-path"
     });
+    logIntroAdvanceEvent("intro-advance-blocked-auto", {
+      source: "blocked-auto-path",
+      targetScreen: "preparation",
+      detail: "startPreparationFlow called without explicit click approval"
+    }, {
+      introScreenName: "preparationIntro",
+      source: "blocked-auto-path"
+    });
     return;
   }
   recordAutoFlowDebugEvent("auto-start-preparation-flow", {
@@ -2401,6 +2409,14 @@ function enterCookingFlow(context = {}) {
       source: "blocked-auto-path",
       targetScreen: "cooking",
       detail: "enterCookingFlow called without explicit intro approval"
+    }, {
+      introScreenName: "cookingIntro",
+      source: "blocked-auto-path"
+    });
+    logIntroAdvanceEvent("intro-advance-blocked-auto", {
+      source: "blocked-auto-path",
+      targetScreen: "cooking",
+      detail: "enterCookingFlow called without explicit click approval"
     }, {
       introScreenName: "cookingIntro",
       source: "blocked-auto-path"
