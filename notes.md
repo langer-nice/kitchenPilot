@@ -7,7 +7,7 @@ Open AI - API Keys :
 https://platform.openai.com/api-keys
 
 
-Ingredients
+Ingredients 
 300g spaghetti
 2 garlic cloves
 2 tbsp olive oil
