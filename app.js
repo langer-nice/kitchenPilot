@@ -67,6 +67,9 @@ const appState = {
   ignoredCookingLiveCommandSessionId: 0,
   ignoredCookingLiveCommandTranscript: "",
   ignoredCookingLiveCommandUntil: 0,
+  expiredCookingVoiceSessionId: 0,
+  expiredCookingVoiceTranscript: "",
+  expiredCookingVoiceCommandKey: "",
   lastSpokenPreparationIndex: null,
   lastSpokenCookingIndex: null,
   voiceHintMessage: "",
@@ -152,7 +155,33 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v94"; 
+const COOKING_DEBUG_TEST_RECIPE = {
+  title: "Spaghetti Aglio e Olio",
+  sourceUrl: EXAMPLE_RECIPE_URL,
+  ingredients: [
+    "200g spaghetti",
+    "3 cloves garlic",
+    "4 tbsp olive oil",
+    "Salt",
+    "Chili flakes (optional)",
+    "Parsley (optional)"
+  ],
+  preparationSteps: [
+    "Slice the garlic.",
+    "Measure the olive oil and seasonings."
+  ],
+  cookingSteps: [
+    { text: "Bring a large pot of salted water to a boil and wait 5 seconds.", timerSeconds: 5 },
+    { text: "Cook the spaghetti for 10 seconds.", timerSeconds: 10 },
+    { text: "Meanwhile, heat olive oil in a pan over medium heat." },
+    { text: "Add sliced garlic and cook for 10 seconds until lightly golden.", timerSeconds: 10 },
+    { text: "Add chili flakes if desired." },
+    { text: "Drain the pasta and add it to the pan." },
+    { text: "Toss well and cook for 10 seconds.", timerSeconds: 10 },
+    { text: "Serve with parsley." }
+  ]
+};
+const BUILD_VERSION = "DEV BUILD: v95"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -509,12 +538,17 @@ function consumeCookingCommand(commandText, timing = {}) {
   appState.lastConsumedCookingCommandAt = consumedAt;
   appState.lastConsumedCookingCommandSessionId = Number(appState.voiceUserSpeechSessionId || 0);
   appState.lastConsumedCookingCommandTranscript = normalizeVoiceCommandText(commandText);
+  appState.expiredCookingVoiceSessionId = Number(appState.voiceUserSpeechSessionId || 0);
+  appState.expiredCookingVoiceTranscript = appState.lastConsumedCookingCommandTranscript;
+  appState.expiredCookingVoiceCommandKey = "next";
   recordCookingDebugEvent("cooking-command-consumed", {
     transcript: commandText,
     normalizedTranscript: appState.lastConsumedCookingCommandTranscript,
     consumedAt,
     speechSessionId: appState.lastConsumedCookingCommandSessionId
   });
+  expireCookingVoiceSession("next-consumed");
+  clearCookingTranscriptAfterConsumption("next-consumed");
 }
 
 function hasSkippableActiveTimerForCurrentCookingStep() {
@@ -621,6 +655,9 @@ function consumeCookingSkipTimerCommand(commandText, timing = {}) {
   appState.lastConsumedCookingSkipTimerSessionId = Number(appState.voiceUserSpeechSessionId || 0);
   appState.lastConsumedCookingSkipTimerTranscript = normalizeVoiceCommandText(commandText);
   appState.lastConsumedCookingSkipTimerStepIndex = appState.cookingIndex;
+  appState.expiredCookingVoiceSessionId = Number(appState.voiceUserSpeechSessionId || 0);
+  appState.expiredCookingVoiceTranscript = appState.lastConsumedCookingSkipTimerTranscript;
+  appState.expiredCookingVoiceCommandKey = "skip_timer";
   recordCookingDebugEvent("cooking-skip-timer-consumed", {
     matchedCommand: "skip_timer",
     transcript: commandText,
@@ -630,6 +667,76 @@ function consumeCookingSkipTimerCommand(commandText, timing = {}) {
     cookingIndex: appState.cookingIndex,
     source: "voice-skip-timer"
   });
+  expireCookingVoiceSession("skip-timer-consumed");
+  clearCookingTranscriptAfterConsumption("skip-timer-consumed");
+}
+
+function clearCookingTranscriptAfterConsumption(reason = "consumed") {
+  appState.voiceHeard = "";
+  appState.voiceLastTranscript = "";
+  appState.voiceLastTranscriptAt = 0;
+  recordCookingDebugEvent("cooking-transcript-cleared-after-consumption", {
+    reason,
+    expiredSessionId: appState.expiredCookingVoiceSessionId || 0,
+    expiredTranscript: appState.expiredCookingVoiceTranscript || "",
+    expiredCommandKey: appState.expiredCookingVoiceCommandKey || ""
+  });
+}
+
+function expireCookingVoiceSession(reason = "consumed-command") {
+  if (!appState.expiredCookingVoiceSessionId) {
+    return;
+  }
+  recordCookingDebugEvent("cooking-voice-session-expired", {
+    reason,
+    speechSessionId: appState.expiredCookingVoiceSessionId,
+    transcript: appState.expiredCookingVoiceTranscript || "",
+    commandKey: appState.expiredCookingVoiceCommandKey || ""
+  });
+}
+
+function shouldDropExpiredCookingVoiceSessionResult(commandText, timing = {}, commandKey = "") {
+  if (!(appState.currentScreen === "cooking" || appState.currentScreen === "timerActive")) {
+    return false;
+  }
+
+  const expiredSessionId = Number(appState.expiredCookingVoiceSessionId || 0);
+  if (!expiredSessionId) {
+    return false;
+  }
+
+  const currentSpeechSessionId = Number(appState.voiceUserSpeechSessionId || 0);
+  if (!currentSpeechSessionId || currentSpeechSessionId !== expiredSessionId) {
+    return false;
+  }
+
+  const normalizedTranscript = normalizeVoiceCommandText(commandText);
+  const expiredTranscript = appState.expiredCookingVoiceTranscript || "";
+  const expiredCommandKey = appState.expiredCookingVoiceCommandKey || "";
+  if (
+    normalizedTranscript !== expiredTranscript &&
+    commandKey !== expiredCommandKey
+  ) {
+    return false;
+  }
+
+  clearCookingTranscriptAfterConsumption("expired-session-result");
+  recordCookingDebugEvent("cooking-result-ignored-before-command-evaluation", {
+    transcript: commandText,
+    normalizedTranscript,
+    commandKey: commandKey || "",
+    speechSessionId: currentSpeechSessionId,
+    expiredCommandKey,
+    source: timing.source || "unknown"
+  });
+  recordCookingDebugEvent("cooking-stale-session-dropped", {
+    transcript: commandText,
+    normalizedTranscript,
+    commandKey: commandKey || "",
+    speechSessionId: currentSpeechSessionId,
+    expiredCommandKey
+  });
+  return true;
 }
 
 function clearCookingSkipTimerLiveState(reason = "consumed") {
@@ -2582,6 +2689,89 @@ function setDevModeEnabled(enabled) {
   }
 }
 
+function launchCookingDebugMode(options = {}) {
+  const recipe = normalizeRecipeForGuidance(JSON.parse(JSON.stringify(COOKING_DEBUG_TEST_RECIPE)));
+  const totalCookingSteps = Array.isArray(recipe.cookingSteps) ? recipe.cookingSteps.length : 0;
+  const requestedIndex = Number.isInteger(options.cookingIndex) ? options.cookingIndex : 0;
+  const cookingIndex = Math.max(0, Math.min(requestedIndex, Math.max(0, totalCookingSteps - 1)));
+  const selectedStep = recipe.cookingSteps?.[cookingIndex] || null;
+  const hasTimer = Boolean(selectedStep && Number.isInteger(selectedStep.timerSeconds) && selectedStep.timerSeconds > 0);
+  const timerMode = String(options.timerMode || "default");
+  const voiceEnabled = Boolean(options.voiceEnabled);
+
+  stopTimer();
+  clearTimerMessageLater();
+
+  appState.recipe = recipe;
+  appState.homeValidationMessage = "";
+  appState.preparationIndex = Math.max(0, (recipe.preparationSteps?.length || 1) - 1);
+  appState.cookingIndex = cookingIndex;
+  appState.lastSpokenPreparationIndex = null;
+  appState.lastSpokenCookingIndex = null;
+  appState.timerMessage = "";
+  appState.timerPaused = false;
+  appState.activeTimerSeconds = null;
+  appState.timerSkippedStepIndex = null;
+  appState.voiceHeard = "";
+  appState.voiceLastTranscript = "";
+  appState.voiceLastTranscriptAt = 0;
+  appState.voiceLastMatchedCommand = "";
+  appState.voiceLastAction = "";
+  appState.voiceLastAcceptedCommandAt = 0;
+  appState.voiceLastAcceptedCommandScreen = "";
+  appState.voiceLastAcceptedCommandTranscript = "";
+  appState.lastCookingNextTriggerSource = "debug-launch";
+  appState.lastCookingNextTriggerAt = getVoiceTimestamp();
+  appState.lastConsumedCookingCommandAt = 0;
+  appState.lastConsumedCookingCommandSessionId = 0;
+  appState.lastConsumedCookingCommandTranscript = "";
+  appState.lastConsumedCookingSkipTimerAt = 0;
+  appState.lastConsumedCookingSkipTimerSessionId = 0;
+  appState.lastConsumedCookingSkipTimerTranscript = "";
+  appState.lastConsumedCookingSkipTimerStepIndex = -1;
+  appState.ignoredConsumedCookingSkipTimerSessionId = 0;
+  appState.ignoredConsumedCookingSkipTimerUntil = 0;
+  appState.ignoredCookingLiveCommandSessionId = 0;
+  appState.ignoredCookingLiveCommandTranscript = "";
+  appState.ignoredCookingLiveCommandUntil = 0;
+  appState.expiredCookingVoiceSessionId = 0;
+  appState.expiredCookingVoiceTranscript = "";
+  appState.expiredCookingVoiceCommandKey = "";
+  initializeIngredientChecklist(recipe);
+
+  if (!hasTimer) {
+    setTimerStatus("idle", "debug cooking launch without timer");
+  } else if (timerMode === "running") {
+    setTimerStatus("idle", "debug cooking launch running timer");
+  } else if (timerMode === "completed") {
+    appState.activeTimerSeconds = 0;
+    setTimerStatus("completed", "debug cooking launch completed timer");
+  } else if (timerMode === "skipped") {
+    appState.activeTimerSeconds = 0;
+    appState.timerSkippedStepIndex = cookingIndex;
+    setTimerStatus("skipped", "debug cooking launch skipped timer");
+  } else {
+    setTimerStatus("idle", "debug cooking launch default timer");
+  }
+
+  const targetScreen = hasTimer && timerMode === "running" ? "timerActive" : "cooking";
+  setScreen(targetScreen);
+
+  recordCookingDebugEvent("cooking-debug-mode-launched", {
+    source: "dev-home",
+    recipeTitle: recipe.title,
+    cookingIndex,
+    timerMode,
+    voiceEnabled,
+    targetScreen
+  });
+
+  setVoiceEnabled(voiceEnabled, {
+    statusMessage: voiceEnabled ? "Voice enabled for cooking debug" : "Voice disabled for cooking debug",
+    statusMs: 900
+  });
+}
+
 function getCurrentCookingStep() {
   if (!appState.recipe || !appState.recipe.cookingSteps) {
     return null;
@@ -3468,6 +3658,9 @@ function startVoiceCommands() {
       }
 
       const fastCommand = getFastVoiceCommand(latestTranscript);
+      if (shouldDropExpiredCookingVoiceSessionResult(latestTranscript, transcriptTiming, fastCommand?.key || "")) {
+        return;
+      }
       if (shouldIgnoreCookingLiveCommandAfterStepTransition(latestTranscript, transcriptTiming)) {
         return;
       }
@@ -3526,6 +3719,14 @@ function startVoiceCommands() {
         return;
       }
       appState.voiceUserSpeechSessionId += 1;
+      if (
+        appState.expiredCookingVoiceSessionId &&
+        appState.expiredCookingVoiceSessionId !== appState.voiceUserSpeechSessionId
+      ) {
+        appState.expiredCookingVoiceSessionId = 0;
+        appState.expiredCookingVoiceTranscript = "";
+        appState.expiredCookingVoiceCommandKey = "";
+      }
       if (
         appState.ignoredCookingLiveCommandSessionId &&
         appState.ignoredCookingLiveCommandSessionId !== appState.voiceUserSpeechSessionId
@@ -4724,7 +4925,67 @@ function renderHome() {
     forceOnboardingBtn.classList.add("homepage-reset-btn");
 
     devActions.append(devResetBtn, forceOnboardingBtn);
-    devToolsCard.append(devToolsTitle, buildLabel, exampleActions, devActions);
+
+    const cookingDebugCard = createCard();
+    const cookingDebugTitle = document.createElement("p");
+    cookingDebugTitle.className = "small";
+    cookingDebugTitle.textContent = "Cooking Test Mode";
+
+    const cookingDebugRecipe = normalizeRecipeForGuidance(JSON.parse(JSON.stringify(COOKING_DEBUG_TEST_RECIPE)));
+    const stepSelect = document.createElement("select");
+    stepSelect.setAttribute("aria-label", "Choose cooking debug step");
+    cookingDebugRecipe.cookingSteps.forEach((step, index) => {
+      const option = document.createElement("option");
+      option.value = String(index);
+      const preview = String(step.text || "").replace(/\s+/g, " ").trim();
+      option.textContent = `Step ${index + 1}: ${preview.slice(0, 42)}${preview.length > 42 ? "..." : ""}`;
+      stepSelect.appendChild(option);
+    });
+
+    const timerModeSelect = document.createElement("select");
+    timerModeSelect.setAttribute("aria-label", "Choose cooking debug timer mode");
+    [
+      ["default", "Use step default"],
+      ["running", "Timer running"],
+      ["completed", "Timer completed"],
+      ["skipped", "Timer skipped"]
+    ].forEach(([value, label]) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      timerModeSelect.appendChild(option);
+    });
+
+    const voiceModeSelect = document.createElement("select");
+    voiceModeSelect.setAttribute("aria-label", "Choose cooking debug voice mode");
+    [
+      ["on", "Voice enabled"],
+      ["off", "Voice disabled"]
+    ].forEach(([value, label]) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      voiceModeSelect.appendChild(option);
+    });
+    voiceModeSelect.value = appState.voiceEnabled ? "on" : "off";
+
+    const cookingDebugControls = document.createElement("div");
+    cookingDebugControls.className = "button-row";
+    cookingDebugControls.append(stepSelect, timerModeSelect, voiceModeSelect);
+
+    const cookingDebugButtonRow = document.createElement("div");
+    cookingDebugButtonRow.className = "button-row";
+    const openCookingDebugBtn = createButton("Jump to Cooking Debug", "", () => {
+      launchCookingDebugMode({
+        cookingIndex: Number.parseInt(stepSelect.value, 10) || 0,
+        timerMode: timerModeSelect.value || "default",
+        voiceEnabled: voiceModeSelect.value === "on"
+      });
+    });
+    cookingDebugButtonRow.appendChild(openCookingDebugBtn);
+
+    cookingDebugCard.append(cookingDebugTitle, cookingDebugControls, cookingDebugButtonRow);
+    devToolsCard.append(devToolsTitle, buildLabel, exampleActions, cookingDebugCard, devActions);
     homeMain.appendChild(devToolsCard);
   }
 
