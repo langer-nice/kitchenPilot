@@ -130,7 +130,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v82"; 
+const BUILD_VERSION = "DEV BUILD: v83"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -2721,6 +2721,11 @@ function handleVoiceCommand(commandText, options = {}) {
   }
 
   if (appState.currentScreen === "ingredients") {
+    recordVoiceDebugEvent("ingredient-voice-heard", {
+      transcript: commandText,
+      normalizedTranscript: command
+    });
+
     if (command === "next") {
       matchCommand("next");
       setVoiceCommandLock("ingredients:ready");
@@ -2729,6 +2734,61 @@ function handleVoiceCommand(commandText, options = {}) {
       }, 0, timing);
       return;
     }
+
+    const ingredientIndex = findIngredientIndexFromVoice(command);
+    if (ingredientIndex >= 0) {
+      recordVoiceDebugEvent("ingredient-match-found", {
+        transcript: commandText,
+        normalizedTranscript: command,
+        ingredientIndex,
+        ingredient: appState.recipe?.ingredients?.[ingredientIndex] || ""
+      });
+      matchCommand("check_ingredient");
+      const screenBefore = appState.currentScreen;
+      const timerBefore = getVoiceTimerSnapshot();
+      highlightVoiceIngredient(ingredientIndex);
+      markVoiceCommandExecuted("Check Ingredient");
+      appState.voiceLastAction = "check-ingredient";
+      recordVoiceDebugEvent("action-before", {
+        transcript: commandText,
+        matchedCommand: "check_ingredient",
+        action: "check-ingredient",
+        screenBefore,
+        timerBefore
+      });
+      window.setTimeout(() => {
+        logVoiceTiming("action-executed", {
+          commandKey: "check_ingredient",
+          actionName: "check-ingredient",
+          commandLabel: "Check Ingredient",
+          matchToActionMs: roundVoiceTiming(getVoiceTimestamp() - timing.matchedAt)
+        });
+        setIngredientChecked(ingredientIndex, true);
+        clearVoiceIngredientHighlight();
+        renderIngredients();
+        recordVoiceDebugEvent("ingredient-checked-by-voice", {
+          transcript: commandText,
+          normalizedTranscript: command,
+          ingredientIndex,
+          ingredient: appState.recipe?.ingredients?.[ingredientIndex] || ""
+        });
+        recordVoiceDebugEvent("action-after", {
+          transcript: commandText,
+          matchedCommand: "check_ingredient",
+          action: "check-ingredient",
+          screenBefore,
+          screenAfter: appState.currentScreen,
+          timerBefore,
+          timerAfter: getVoiceTimerSnapshot()
+        });
+      }, 140);
+      return;
+    }
+
+    recordVoiceDebugEvent("ingredient-match-not-found", {
+      transcript: commandText,
+      normalizedTranscript: command
+    });
   }
 
   if (command === "next") {
