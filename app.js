@@ -147,7 +147,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v91"; 
+const BUILD_VERSION = "DEV BUILD: v92"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -617,11 +617,13 @@ function consumeCookingSkipTimerCommand(commandText, timing = {}) {
   appState.lastConsumedCookingSkipTimerTranscript = normalizeVoiceCommandText(commandText);
   appState.lastConsumedCookingSkipTimerStepIndex = appState.cookingIndex;
   recordCookingDebugEvent("cooking-skip-timer-consumed", {
+    matchedCommand: "skip_timer",
     transcript: commandText,
     normalizedTranscript: appState.lastConsumedCookingSkipTimerTranscript,
     consumedAt,
     speechSessionId: appState.lastConsumedCookingSkipTimerSessionId,
-    cookingIndex: appState.cookingIndex
+    cookingIndex: appState.cookingIndex,
+    source: "voice-skip-timer"
   });
 }
 
@@ -636,6 +638,7 @@ function shouldAllowCookingSkipTimerCommand(commandText, timing = {}) {
 
   if (appState.voiceOutputSpeaking) {
     recordCookingDebugEvent("cooking-command-rejected-because-speaking", {
+      matchedCommand: "skip_timer",
       transcript: commandText,
       normalizedTranscript,
       speechSessionId: currentSpeechSessionId,
@@ -644,6 +647,7 @@ function shouldAllowCookingSkipTimerCommand(commandText, timing = {}) {
     recordCookingDebugEvent("cooking-step-advance-blocked", {
       source: "voice-skip-timer",
       reason: "speaking",
+      matchedCommand: "skip_timer",
       transcript: commandText,
       normalizedTranscript
     });
@@ -654,6 +658,7 @@ function shouldAllowCookingSkipTimerCommand(commandText, timing = {}) {
     recordCookingDebugEvent("cooking-step-advance-blocked", {
       source: "voice-skip-timer",
       reason: "no-active-timer",
+      matchedCommand: "skip_timer",
       transcript: commandText,
       normalizedTranscript,
       cookingIndex: appState.cookingIndex
@@ -667,6 +672,7 @@ function shouldAllowCookingSkipTimerCommand(commandText, timing = {}) {
     currentSpeechSessionId === Number(appState.lastConsumedCookingSkipTimerSessionId || 0)
   ) {
     recordCookingDebugEvent("cooking-skip-timer-rejected-as-already-used", {
+      matchedCommand: "skip_timer",
       transcript: commandText,
       normalizedTranscript,
       speechSessionId: currentSpeechSessionId,
@@ -676,6 +682,7 @@ function shouldAllowCookingSkipTimerCommand(commandText, timing = {}) {
     recordCookingDebugEvent("cooking-step-advance-blocked", {
       source: "voice-skip-timer",
       reason: "already-used",
+      matchedCommand: "skip_timer",
       transcript: commandText,
       normalizedTranscript,
       cookingIndex: appState.cookingIndex
@@ -689,6 +696,7 @@ function shouldAllowCookingSkipTimerCommand(commandText, timing = {}) {
     transcriptAt <= Number(appState.lastConsumedCookingSkipTimerAt || 0)
   ) {
     recordCookingDebugEvent("cooking-skip-timer-rejected-as-stale", {
+      matchedCommand: "skip_timer",
       transcript: commandText,
       normalizedTranscript,
       transcriptAt,
@@ -698,6 +706,7 @@ function shouldAllowCookingSkipTimerCommand(commandText, timing = {}) {
     recordCookingDebugEvent("cooking-step-advance-blocked", {
       source: "voice-skip-timer",
       reason: "stale",
+      matchedCommand: "skip_timer",
       transcript: commandText,
       normalizedTranscript,
       cookingIndex: appState.cookingIndex
@@ -707,6 +716,7 @@ function shouldAllowCookingSkipTimerCommand(commandText, timing = {}) {
 
   recordCookingDebugEvent("cooking-step-advance-allowed", {
     source: "voice-skip-timer",
+    matchedCommand: "skip_timer",
     transcript: commandText,
     normalizedTranscript,
     transcriptAt,
@@ -2933,9 +2943,10 @@ function handleVoiceCommand(commandText, options = {}) {
 
   setVoiceCommandStatus("Processing voice command...", 700);
 
-  function matchCommand(commandKey) {
+function matchCommand(commandKey) {
     timing.commandKey = commandKey;
     timing.matchedAt = getVoiceTimestamp();
+    appState.voiceLastMatchedCommand = commandKey;
     appState.voiceLastAction = "";
     appState.voiceLastAcceptedCommandAt = timing.matchedAt;
     appState.voiceLastAcceptedCommandScreen = appState.currentScreen;
@@ -2949,6 +2960,7 @@ function handleVoiceCommand(commandText, options = {}) {
     }
     recordVoiceDebugEvent("command-accepted-after-screen-change", {
       commandKey,
+      matchedCommand: commandKey,
       transcript: commandText,
       normalizedTranscript: command,
       msSinceScreenEnter: getMsSinceScreenEnter(timing.matchedAt),
@@ -2957,9 +2969,11 @@ function handleVoiceCommand(commandText, options = {}) {
     if (isCookingFlowScreen(appState.currentScreen)) {
       recordCookingDebugEvent("cooking-step-command-accepted", {
         commandKey,
+        matchedCommand: commandKey,
         transcript: commandText,
         normalizedTranscript: command,
-        acceptedOnScreen: appState.currentScreen
+        acceptedOnScreen: appState.currentScreen,
+        source: commandKey === "skip_timer" ? "voice-skip-timer" : commandKey === "next" ? "voice-next" : "voice-command"
       });
     }
     if (isIntroScreen(appState.currentScreen) && commandKey === "next") {
