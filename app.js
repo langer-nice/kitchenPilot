@@ -128,7 +128,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v76"; 
+const BUILD_VERSION = "DEV BUILD: v77"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -440,7 +440,7 @@ function recordVoiceDebugEvent(type, payload = {}) {
     ...payload
   };
 
-  appState.voiceDebugEvents = [entry, ...(appState.voiceDebugEvents || [])].slice(0, 8);
+  appState.voiceDebugEvents = [entry, ...(appState.voiceDebugEvents || [])].slice(0, 24);
   console.log("[voice-debug]", entry);
 }
 
@@ -467,6 +467,11 @@ function recordCookingIntroDebugEvent(type, payload = {}, options = {}) {
 
   recordVoiceDebugEvent(type, {
     msSinceCookingIntroEnter: getMsSinceCookingIntroEnter(referenceTime, effectiveScreen),
+    lastAcceptedCommandTranscript: appState.voiceLastAcceptedCommandTranscript || "",
+    lastAcceptedCommandScreen: appState.voiceLastAcceptedCommandScreen || "",
+    msSinceAcceptedVoiceCommand: Number(appState.voiceLastAcceptedCommandAt || 0)
+      ? roundVoiceTiming(referenceTime - appState.voiceLastAcceptedCommandAt)
+      : null,
     ...payload
   });
 }
@@ -561,6 +566,15 @@ function shouldSuppressDuplicateVoiceCommand(commandKey, transcript) {
       transcript,
       normalizedTranscript,
       msSinceScreenEnter: getMsSinceScreenEnter(now)
+    });
+    recordCookingIntroDebugEvent("stale-command-reused", {
+      commandKey,
+      transcript,
+      normalizedTranscript,
+      reason: "duplicate-suppressed",
+      carriedOverState: true
+    }, {
+      referenceTime: now
     });
     recordCookingIntroDebugEvent("cookingIntro-stale-transcript-ignored", {
       commandKey,
@@ -664,6 +678,15 @@ function shouldIgnorePreparationTranscript(transcript, timing = {}) {
       isFinal: Boolean(timing.isFinal),
       msSinceScreenEnter: getMsSinceScreenEnter(now),
       ignoredUntilMs: roundVoiceTiming(gateUntil - now)
+    });
+    recordCookingIntroDebugEvent("transcript-ignored-as-stale", {
+      transcript,
+      reason: "stale",
+      source: timing.source || "unknown",
+      isFinal: Boolean(timing.isFinal),
+      ignoredUntilMs: roundVoiceTiming(gateUntil - now)
+    }, {
+      referenceTime: now
     });
     recordCookingIntroDebugEvent("stale transcript ignored", {
       transcript,
@@ -1088,6 +1111,25 @@ function setScreen(screenName) {
       msSinceAcceptedVoiceCommand: lastAcceptedCommandAt ? roundVoiceTiming(enteredAt - lastAcceptedCommandAt) : null,
       lastAcceptedCommandTranscript: appState.voiceLastAcceptedCommandTranscript || "",
       lastAcceptedCommandScreen: appState.voiceLastAcceptedCommandScreen || ""
+    });
+  }
+
+  if (screenName === "cooking") {
+    recordVoiceDebugEvent("screen-change-to-cooking", {
+      previousScreen,
+      nextScreen: screenName,
+      at: getDebugTimestampIso(),
+      lastAcceptedCommandTranscript: appState.voiceLastAcceptedCommandTranscript || "",
+      lastAcceptedCommandScreen: appState.voiceLastAcceptedCommandScreen || "",
+      msSinceAcceptedVoiceCommand: lastAcceptedCommandAt ? roundVoiceTiming(enteredAt - lastAcceptedCommandAt) : null
+    });
+    recordCookingIntroDebugEvent("screen-change-to-cooking", {
+      previousScreen,
+      nextScreen: screenName,
+      freshVoiceCommandForTransition
+    }, {
+      referenceTime: enteredAt,
+      screenName: previousScreen
     });
   }
 
@@ -2120,10 +2162,12 @@ function enterCookingFlow(context = {}) {
   );
 
   if (currentScreenIsCookingIntro) {
-    recordCookingIntroDebugEvent("cookingIntro-start-cooking-called", {
+    const carriedOverState = !hasFreshCommand;
+    recordCookingIntroDebugEvent("startCookingFlow-called", {
       triggerSource,
       triggerDetail: context.triggerDetail || "",
       freshCommandForCookingIntro: hasFreshCommand,
+      carriedOverState,
       acceptedCommandTranscript: appState.voiceLastAcceptedCommandTranscript || "",
       acceptedCommandScreen: appState.voiceLastAcceptedCommandScreen || "",
       msSinceAcceptedCommand: Number(appState.voiceLastAcceptedCommandAt || 0)
@@ -2153,12 +2197,21 @@ function enterCookingFlow(context = {}) {
     }, {
       referenceTime: now
     });
+    recordCookingIntroDebugEvent("cookingIntro-start-cooking-called", {
+      triggerSource,
+      triggerDetail: context.triggerDetail || "",
+      freshCommandForCookingIntro: hasFreshCommand,
+      carriedOverState
+    }, {
+      referenceTime: now
+    });
 
     if (!hasFreshCommand || triggerSource !== "voice-next") {
       recordCookingIntroDebugEvent("cookingIntro-auto-start-triggered", {
         triggerSource,
         triggerDetail: context.triggerDetail || "",
         freshCommandForCookingIntro: hasFreshCommand,
+        carriedOverState,
         acceptedCommandTranscript: appState.voiceLastAcceptedCommandTranscript || "",
         acceptedCommandScreen: appState.voiceLastAcceptedCommandScreen || "",
         msSinceAcceptedCommand: Number(appState.voiceLastAcceptedCommandAt || 0)
@@ -2258,6 +2311,15 @@ function handleVoiceCommand(commandText, options = {}) {
     }, {
       referenceTime: timing.matchedAt
     });
+    if (commandKey === "next") {
+      recordCookingIntroDebugEvent("cookingIntro-next-accepted", {
+        transcript: commandText,
+        normalizedTranscript: command,
+        acceptedOnScreen: appState.currentScreen
+      }, {
+        referenceTime: timing.matchedAt
+      });
+    }
     logVoiceCommandMatch(commandKey, commandText, timing);
   }
 
