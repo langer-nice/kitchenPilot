@@ -119,7 +119,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v73"; 
+const BUILD_VERSION = "DEV BUILD: v74"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -468,15 +468,10 @@ function getFastVoiceCommand(commandText) {
   }
 
   const commandMap = {
+    // Temporary debug simplification: only allow the minimal explicit command set.
     "next": { key: "next", label: "Next" },
-    "next step": { key: "next", label: "Next" },
     "repeat": { key: "repeat", label: "Repeat" },
-    "repeat step": { key: "repeat", label: "Repeat" },
-    "pause": { key: "pause", label: "Pause" },
     "pause timer": { key: "pause_timer", label: "Pause Timer" },
-    "resume": { key: "resume", label: "Resume" },
-    "resume timer": { key: "resume", label: "Resume Timer" },
-    "start cooking": { key: "start_cooking", label: "Start Cooking" },
     "skip timer": { key: "skip_timer", label: "Skip Timer" }
   };
 
@@ -553,6 +548,13 @@ function shouldIgnorePreparationTranscript(transcript, timing = {}) {
   }
 
   if (gateUntil && now < gateUntil) {
+    console.log("[voice-debug] transcript rejected as stale", {
+      transcript,
+      source: timing.source || "unknown",
+      isFinal: Boolean(timing.isFinal),
+      ignoredUntilMs: roundVoiceTiming(gateUntil - now),
+      screen: appState.currentScreen
+    });
     recordPreparationVoiceDebugEvent("transcript-ignored-stale", {
       transcript,
       source: timing.source || "unknown",
@@ -1946,7 +1948,7 @@ function enterCookingFlow() {
 }
 
 function handleVoiceCommand(commandText, options = {}) {
-  const command = commandText.toLowerCase();
+  const command = normalizeVoiceCommandText(commandText);
   const timing = {
     transcriptReceivedAt: options.transcriptReceivedAt ?? null,
     source: options.source || "final",
@@ -1977,11 +1979,18 @@ function handleVoiceCommand(commandText, options = {}) {
     timing.commandKey = commandKey;
     timing.matchedAt = getVoiceTimestamp();
     appState.voiceLastAction = "";
+    if (commandKey === "next") {
+      console.log("[voice-debug] next accepted", {
+        transcript: commandText,
+        normalizedTranscript: command,
+        screen: appState.currentScreen
+      });
+    }
     logVoiceCommandMatch(commandKey, commandText, timing);
   }
 
   if (appState.currentScreen === "ingredientsIntro") {
-    if (command.includes("next") || command.includes("continue") || command.includes("start")) {
+    if (command === "next") {
       matchCommand("next");
       setVoiceCommandLock("ingredientsIntro:continue");
       runVoiceAction("next", "Continue", () => {
@@ -1989,19 +1998,10 @@ function handleVoiceCommand(commandText, options = {}) {
       }, 0, timing);
       return;
     }
-
-    if (command.includes("back")) {
-      matchCommand("back");
-      setVoiceCommandLock("ingredientsIntro:back");
-      runVoiceAction("back", "Back", () => {
-        setScreen("analysis");
-      }, 0, timing);
-      return;
-    }
   }
 
   if (appState.currentScreen === "preparationIntro") {
-    if (command.includes("next") || command.includes("continue") || command.includes("start")) {
+    if (command === "next") {
       matchCommand("next");
       setVoiceCommandLock("preparationIntro:continue");
       runVoiceAction("next", "Continue", () => {
@@ -2009,19 +2009,10 @@ function handleVoiceCommand(commandText, options = {}) {
       }, 0, timing);
       return;
     }
-
-    if (command.includes("back")) {
-      matchCommand("back");
-      setVoiceCommandLock("preparationIntro:back");
-      runVoiceAction("back", "Back", () => {
-        setScreen("ingredients");
-      }, 0, timing);
-      return;
-    }
   }
 
   if (appState.currentScreen === "ingredients") {
-    if (command.includes("next") || command.includes("ready") || command.includes("continue")) {
+    if (command === "next") {
       matchCommand("next");
       setVoiceCommandLock("ingredients:ready");
       runVoiceAction("next", "Ready", () => {
@@ -2029,60 +2020,11 @@ function handleVoiceCommand(commandText, options = {}) {
       }, 0, timing);
       return;
     }
-
-    if (command.includes("back")) {
-      matchCommand("back");
-      setVoiceCommandLock("ingredients:back");
-      runVoiceAction("back", "Back", () => {
-        setScreen("ingredientsIntro");
-      }, 0, timing);
-      return;
-    }
-
-    const ingredientIndex = findIngredientIndexFromVoice(command);
-    if (ingredientIndex >= 0) {
-      matchCommand("check_ingredient");
-      const screenBefore = appState.currentScreen;
-      const timerBefore = getVoiceTimerSnapshot();
-      highlightVoiceIngredient(ingredientIndex);
-      markVoiceCommandExecuted("Check Ingredient");
-      appState.voiceLastAction = "check-ingredient";
-      recordVoiceDebugEvent("action-before", {
-        transcript: commandText,
-        matchedCommand: "check_ingredient",
-        action: "check-ingredient",
-        screenBefore,
-        timerBefore
-      });
-      window.setTimeout(() => {
-        logVoiceTiming("action-executed", {
-          commandKey: "check_ingredient",
-          actionName: "check-ingredient",
-          commandLabel: "Check Ingredient",
-          matchToActionMs: roundVoiceTiming(getVoiceTimestamp() - timing.matchedAt)
-        });
-        setIngredientChecked(ingredientIndex, true);
-        clearVoiceIngredientHighlight();
-        renderIngredients();
-        recordVoiceDebugEvent("action-after", {
-          transcript: commandText,
-          matchedCommand: "check_ingredient",
-          action: "check-ingredient",
-          screenBefore,
-          screenAfter: appState.currentScreen,
-          timerBefore,
-          timerAfter: getVoiceTimerSnapshot()
-        });
-      }, 140);
-      return;
-    }
-
-    return;
   }
 
-  if (command.includes("next")) {
+  if (command === "next") {
     if (appState.currentScreen === "cookingIntro") {
-      matchCommand("start_cooking");
+      matchCommand("next");
       setVoiceCommandLock("cookingIntro:next");
       runVoiceAction("next", "Start Cooking", () => {
         enterCookingFlow();
@@ -2125,53 +2067,7 @@ function handleVoiceCommand(commandText, options = {}) {
     return;
   }
 
-  if (appState.currentScreen === "preparation" && (command.includes("ready") || command.includes("continue"))) {
-    matchCommand("next");
-    setVoiceCommandLock("preparation:next");
-    if (appState.recipe && appState.preparationIndex >= appState.recipe.preparationSteps.length - 1) {
-      console.log("[preparation] Final preparation command received", {
-        transcript: commandText,
-        preparationIndex: appState.preparationIndex
-      });
-      recordVoiceDebugEvent("preparation-final-command", {
-        transcript: commandText,
-        preparationIndex: appState.preparationIndex
-      });
-    }
-    runVoiceAction("next", "Next", () => {
-      advancePreparationStep();
-    }, 0, timing);
-    return;
-  }
-
-  if (command.includes("previous") || command.includes("back")) {
-    if (appState.currentScreen === "cookingIntro") {
-      matchCommand("back");
-      setVoiceCommandLock("cookingIntro:back");
-      runVoiceAction("back", "Back", () => {
-        openPreparationIntro();
-      }, 0, timing);
-      return;
-    }
-
-    if (appState.currentScreen === "preparation") {
-      matchCommand("back");
-      setVoiceCommandLock("preparation:back");
-      runVoiceAction("back", "Back", () => {
-        goBackPreparationStep();
-      }, 0, timing);
-      return;
-    }
-
-    matchCommand("back");
-    setVoiceCommandLock("cooking:back");
-    runVoiceAction("back", "Back", () => {
-      goToPreviousCookingStep();
-    }, 0, timing);
-    return;
-  }
-
-  if (command.includes("repeat")) {
+  if (command === "repeat") {
     if (appState.currentScreen === "preparation") {
       matchCommand("repeat");
       runVoiceAction("repeat", "Repeat", () => {
@@ -2190,125 +2086,15 @@ function handleVoiceCommand(commandText, options = {}) {
     return;
   }
 
-  if (command.includes("pause")) {
-    matchCommand(command.includes("timer") ? "pause_timer" : "pause");
+  if (command === "pause timer") {
+    matchCommand("pause_timer");
     runVoiceAction("pause", "Pause", () => {
       toggleGuidancePause();
     }, 0, timing);
     return;
   }
 
-  if (appState.currentScreen === "cookingIntro" && command.includes("start") && command.includes("cook")) {
-    matchCommand("start_cooking");
-    setVoiceCommandLock("cookingIntro:start");
-    runVoiceAction("next", "Start Cooking", () => {
-      enterCookingFlow();
-    }, 0, timing);
-    return;
-  }
-
-  if (command.includes("resume")) {
-    const step = getCurrentCookingStep();
-    const hasTimer = step && Number.isInteger(step.timerSeconds) && step.timerSeconds > 0;
-
-    if (!hasTimer) {
-      setVoiceHint("This step has no timer.", 1800);
-      return;
-    }
-
-    matchCommand("resume");
-    if (appState.timerStatus === "paused") {
-      runVoiceAction("pause", "Resume", () => {
-        resumeTimer();
-        appState.timerPaused = false;
-        appState.timerMessage = "Timer running";
-        setTimerStatus("running", "voice resume timer");
-
-        if (appState.currentScreen === "cooking") {
-          renderCooking();
-        }
-        if (appState.currentScreen === "timerActive") {
-          renderTimerActive();
-        }
-      }, 0, timing);
-    } else if (appState.timerStatus === "idle") {
-      runVoiceAction("pause", "Resume", () => {
-        startStepTimerIfNeeded(step);
-
-        if (appState.currentScreen === "cooking") {
-          renderCooking();
-        }
-        if (appState.currentScreen === "timerActive") {
-          renderTimerActive();
-        }
-      }, 0, timing);
-    }
-    return;
-  }
-
-  if (command.includes("start") && command.includes("timer")) {
-    const step = getCurrentCookingStep();
-    const hasTimer = step && Number.isInteger(step.timerSeconds) && step.timerSeconds > 0;
-
-    if (!hasTimer) {
-      setVoiceHint("This step has no timer.", 1800);
-      return;
-    }
-
-    matchCommand("start_timer");
-    const screenBefore = appState.currentScreen;
-    const timerBefore = getVoiceTimerSnapshot();
-    appState.voiceLastAction = "start-timer";
-    recordVoiceDebugEvent("action-before", {
-      transcript: commandText,
-      matchedCommand: "start_timer",
-      action: "start-timer",
-      screenBefore,
-      timerBefore
-    });
-    if (appState.timerStatus === "paused") {
-      resumeTimer();
-      appState.timerPaused = false;
-      appState.timerMessage = "Timer running";
-      setTimerStatus("running", "voice start timer resume");
-      markVoiceCommandExecuted("Start Timer");
-    } else if (appState.timerStatus === "idle") {
-      startStepTimerIfNeeded(step);
-      markVoiceCommandExecuted("Start Timer");
-    }
-
-    logVoiceTiming("action-executed", {
-      commandKey: "start_timer",
-      actionName: "start-timer",
-      commandLabel: "Start Timer",
-      matchToActionMs: roundVoiceTiming(getVoiceTimestamp() - timing.matchedAt)
-    });
-
-    if (appState.currentScreen === "timerActive") {
-      renderTimerActive();
-    }
-    recordVoiceDebugEvent("action-after", {
-      transcript: commandText,
-      matchedCommand: "start_timer",
-      action: "start-timer",
-      screenBefore,
-      screenAfter: appState.currentScreen,
-      timerBefore,
-      timerAfter: getVoiceTimerSnapshot()
-    });
-    return;
-  }
-
-  if (command.includes("stop")) {
-    matchCommand("stop");
-    setVoiceCommandLock("stop");
-    runVoiceAction("stop", "Stop", () => {
-      stopCookingFlow();
-    }, 0, timing);
-    return;
-  }
-
-  if (command.includes("skip") && command.includes("timer")) {
+  if (command === "skip timer") {
     matchCommand("skip_timer");
     setVoiceCommandLock("timer:skip");
     runVoiceAction("skip-timer", "Skip Timer", () => {
@@ -2316,6 +2102,16 @@ function handleVoiceCommand(commandText, options = {}) {
     }, 0, timing);
     return;
   }
+
+  console.log("[voice-debug] transcript ignored: invalid command", {
+    transcript: commandText,
+    normalizedTranscript: command,
+    screen: appState.currentScreen
+  });
+  recordVoiceDebugEvent("command-invalid", {
+    transcript: commandText,
+    normalizedTranscript: command
+  });
 
   if (appState.voiceListening) {
     recordVoiceDebugEvent("command-no-match", {
@@ -3648,8 +3444,9 @@ function renderAnalysis() {
 
   const actions = document.createElement("div");
   actions.className = "button-row analysis-actions";
+  // Temporary debug simplification: all guided-flow forward actions use "Next".
   actions.append(
-    createButton("Start Guided Cooking", "primary", () => {
+    createButton("Next", "primary", () => {
       maybeShowVoiceOnboarding(() => setScreen("ingredientsIntro"));
     }),
     createButton("Back to Home", "", () => setScreen("home"))
@@ -3762,7 +3559,7 @@ function renderIngredientsIntro() {
   actions.append(
     createButton("Home", "secondary-action", () => setScreen("home"), "home"),
     createButton("Back", "secondary-action", () => setScreen("analysis"), "back"),
-    createButton("Continue", "primary primary-action", () => setScreen("ingredients"), "next")
+    createButton("Next", "primary primary-action", () => setScreen("ingredients"), "next")
   );
 
   footer.appendChild(actions);
@@ -3810,7 +3607,7 @@ function renderPreparationIntro() {
   actions.append(
     createButton("Home", "secondary-action", () => setScreen("home"), "home"),
     createButton("Back", "secondary-action", () => setScreen("ingredients"), "back"),
-    createButton("Continue", "primary primary-action", () => startPreparationFlow(), "next")
+    createButton("Next", "primary primary-action", () => startPreparationFlow(), "next")
   );
 
   footer.appendChild(actions);
@@ -3854,7 +3651,7 @@ function renderCookingIntro() {
   actions.append(
     createButton("Home", "secondary-action", () => setScreen("home"), "home"),
     createButton("Back", "secondary-action", () => openPreparationIntro(), "back"),
-    createButton("Start Cooking", "primary primary-action", () => enterCookingFlow(), "next")
+    createButton("Next", "primary primary-action", () => enterCookingFlow(), "next")
   );
 
   footer.appendChild(actions);
@@ -3928,7 +3725,7 @@ function renderIngredients(options = {}) {
   actions.className = "button-row two";
   actions.append(
     createButton("Back", "", () => setScreen("ingredientsIntro")),
-    createButton("Ready", "primary", () => setScreen("preparationIntro"))
+    createButton("Next", "primary", () => setScreen("preparationIntro"))
   );
   footer.appendChild(actions);
 
