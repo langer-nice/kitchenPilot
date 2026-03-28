@@ -181,7 +181,7 @@ const COOKING_DEBUG_TEST_RECIPE = {
     { text: "Serve with parsley." }
   ]
 };
-const BUILD_VERSION = "DEV BUILD: v95"; 
+const BUILD_VERSION = "DEV BUILD: v97"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -852,6 +852,21 @@ function clearCookingLiveCommandStateAfterStepTransition(source = "unknown", nex
     source,
     nextCookingIndex
   });
+
+  if (String(source).startsWith("voice-")) {
+    appState.lastConsumedCookingCommandAt = 0;
+    appState.lastConsumedCookingCommandSessionId = 0;
+    appState.lastConsumedCookingCommandTranscript = "";
+    appState.lastConsumedCookingSkipTimerAt = 0;
+    appState.lastConsumedCookingSkipTimerSessionId = 0;
+    appState.lastConsumedCookingSkipTimerTranscript = "";
+    appState.lastConsumedCookingSkipTimerStepIndex = -1;
+    recordCookingDebugEvent("cooking-stale-session-dropped", {
+      source,
+      reason: "flushed-prior-consumed-cooking-voice-sessions-after-step-transition",
+      nextCookingIndex
+    });
+  }
 }
 
 function shouldIgnoreCookingLiveCommandAfterStepTransition(commandText, timing = {}) {
