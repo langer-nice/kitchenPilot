@@ -130,7 +130,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v80"; 
+const BUILD_VERSION = "DEV BUILD: v81"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -153,6 +153,10 @@ const COOKING_KEYWORDS = [
   "bring to a boil", "gentle boil", "reduce heat", "lower the oven", "lower heat",
   "until tender", "until golden", "until set", "minutes", "minute", "hours", "hour"
 ];
+// Temporary debug isolation: intro screens are click-only so we can determine
+// whether unwanted intro auto-advances are coming from voice handling or from
+// non-voice intro logic.
+const INTRO_SCREENS_CLICK_ONLY_DEBUG = true;
 const RECIPE_FLOW_PROTOTYPE_EXAMPLES = [
   {
     title: "Ina Garten's Perfect Roast Chicken",
@@ -1020,7 +1024,9 @@ function requestIntroAdvance(introScreenName, source, triggerAt, action, detail 
   const introEnteredAt = Number(appState.voiceScreenEnteredAt || 0);
   const acceptAt = Number(appState.voiceIntroAcceptCommandsAt || 0);
   const isCurrentIntro = appState.currentScreen === introScreenName;
-  const isAllowedSource = source === "click" || source === "fresh-voice";
+  const isAllowedSource = INTRO_SCREENS_CLICK_ONLY_DEBUG
+    ? source === "click"
+    : (source === "click" || source === "fresh-voice");
   const afterIntroEntry = Number.isFinite(triggerAt) && triggerAt >= introEnteredAt;
   const passesFreshGate = source === "click" ? afterIntroEntry : afterIntroEntry && (!acceptAt || triggerAt >= acceptAt);
 
@@ -1039,8 +1045,11 @@ function requestIntroAdvance(introScreenName, source, triggerAt, action, detail 
   });
 
   if (!isCurrentIntro || !targetScreen || !isAllowedSource || !passesFreshGate) {
+    const blockedSource = !isAllowedSource && source === "fresh-voice"
+      ? "voice"
+      : "blocked-auto-path";
     logIntroAdvanceEvent("intro-advance-blocked", {
-      source: isAllowedSource ? source : "blocked-auto-path",
+      source: isAllowedSource ? source : blockedSource,
       targetScreen,
       detail,
       isCurrentIntro,
@@ -1051,8 +1060,31 @@ function requestIntroAdvance(introScreenName, source, triggerAt, action, detail 
     }, {
       referenceTime: triggerAt,
       introScreenName,
-      source: isAllowedSource ? source : "blocked-auto-path"
+      source: isAllowedSource ? source : blockedSource
     });
+    if (!isAllowedSource && source === "fresh-voice") {
+      logIntroAdvanceEvent("intro-advance-blocked-voice", {
+        source,
+        targetScreen,
+        detail,
+        reason: "intro-click-only-debug-mode"
+      }, {
+        referenceTime: triggerAt,
+        introScreenName,
+        source: "voice"
+      });
+    } else {
+      logIntroAdvanceEvent("intro-advance-blocked-auto", {
+        source,
+        targetScreen,
+        detail,
+        reason: "intro-transition-without-valid-click-trigger"
+      }, {
+        referenceTime: triggerAt,
+        introScreenName,
+        source: "blocked-auto-path"
+      });
+    }
     return false;
   }
 
@@ -2144,6 +2176,14 @@ function startPreparationFlow() {
       introScreenName: "preparationIntro",
       source: "blocked-auto-path"
     });
+    logIntroAdvanceEvent("intro-advance-blocked-auto", {
+      source: "blocked-auto-path",
+      targetScreen: "preparation",
+      detail: "startPreparationFlow called without explicit click approval"
+    }, {
+      introScreenName: "preparationIntro",
+      source: "blocked-auto-path"
+    });
     return;
   }
   recordAutoFlowDebugEvent("auto-start-preparation-flow", {
@@ -2365,6 +2405,14 @@ function enterCookingFlow(context = {}) {
       introScreenName: "cookingIntro",
       source: "blocked-auto-path"
     });
+    logIntroAdvanceEvent("intro-advance-blocked-auto", {
+      source: "blocked-auto-path",
+      targetScreen: "cooking",
+      detail: "enterCookingFlow called without explicit click approval"
+    }, {
+      introScreenName: "cookingIntro",
+      source: "blocked-auto-path"
+    });
     recordCookingIntroDebugEvent("cookingIntro-auto-start-triggered", {
       triggerSource: context.source || "unknown",
       triggerDetail: context.triggerDetail || "enterCookingFlow called without explicit intro approval",
@@ -2536,6 +2584,23 @@ function handleVoiceCommand(commandText, options = {}) {
   };
 
   if (shouldIgnoreIntroCommand(commandText, timing)) {
+    return;
+  }
+
+  if (INTRO_SCREENS_CLICK_ONLY_DEBUG && isIntroScreen(appState.currentScreen) && command === "next") {
+    const blockedAt = Number.isFinite(timing.transcriptReceivedAt) ? timing.transcriptReceivedAt : getVoiceTimestamp();
+    logIntroAdvanceEvent("intro-advance-blocked-voice", {
+      source: "fresh-voice",
+      transcript: commandText,
+      normalizedTranscript: command,
+      reason: "intro-click-only-debug-mode"
+    }, {
+      referenceTime: blockedAt,
+      introScreenName: appState.currentScreen,
+      source: "voice"
+    });
+    setVoiceCommandStatus("Listening...", 0);
+    renderCurrentVoiceScreen();
     return;
   }
 
