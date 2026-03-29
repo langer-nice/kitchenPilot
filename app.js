@@ -135,7 +135,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v93"; 
+const BUILD_VERSION = "DEV BUILD: v94"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -863,6 +863,23 @@ function ensureCookingVoiceReady(reason = "step-enter", payload = {}) {
   ) {
     startVoiceCommands();
   }
+}
+
+function recordCookingVoicePanelState(reason = "panel-state", payload = {}) {
+  if (getVoiceScreenMode() !== "cooking") {
+    return;
+  }
+
+  recordCookingVoiceDebugEvent("cooking-voice-panel-state-updated", {
+    reason,
+    cookingIndex: appState.cookingIndex,
+    voiceEnabled: appState.voiceEnabled,
+    voiceListening: appState.voiceListening,
+    voiceOutputSpeaking: appState.voiceOutputSpeaking,
+    timerStatus: appState.timerStatus,
+    screenMode: getVoiceScreenMode(),
+    ...payload
+  });
 }
 
 function shouldIgnoreConsumedCookingVoiceResult(transcript, commandKey = "") {
@@ -3591,10 +3608,49 @@ function startVoiceCommands() {
     logVoiceTiming("recognition-start-requested", {
       screen: appState.currentScreen
     });
-  } catch {
-    appState.voiceEnabled = false;
-    appState.voiceErrorMessage = "Could not start voice input. Check microphone permission and try again.";
-    setVoiceCommandStatus("", 0);
+  } catch (error) {
+    const errorName = error && error.name ? String(error.name) : "";
+    const errorMessage = error && error.message ? String(error.message) : "";
+    const recoverableStartState = errorName === "InvalidStateError" || /start/i.test(errorMessage);
+
+    if (recoverableStartState) {
+      appState.voiceEnabled = true;
+      appState.voiceListening = true;
+      appState.voiceErrorMessage = "";
+      setVoiceCommandStatus("Listening...", 0);
+      if (appState.currentScreen === "cooking") {
+        recordCookingVoiceDebugEvent("cooking-voice-ready-restored", {
+          reason: "recognition-already-active",
+          errorName,
+          errorMessage,
+          cookingIndex: appState.cookingIndex,
+          timerStatus: appState.timerStatus,
+          screenMode: getVoiceScreenMode()
+        });
+        recordCookingVoicePanelState("recognition-already-active", {
+          errorName,
+          errorMessage
+        });
+      }
+    } else {
+      appState.voiceEnabled = false;
+      appState.voiceErrorMessage = "Could not start voice input. Check microphone permission and try again.";
+      setVoiceCommandStatus("", 0);
+      if (appState.currentScreen === "cooking") {
+        recordCookingVoiceDebugEvent("cooking-voice-ready-not-restored", {
+          reason: "recognition-start-failed",
+          errorName,
+          errorMessage,
+          cookingIndex: appState.cookingIndex,
+          timerStatus: appState.timerStatus,
+          screenMode: getVoiceScreenMode()
+        });
+        recordCookingVoicePanelState("recognition-start-failed", {
+          errorName,
+          errorMessage
+        });
+      }
+    }
   }
   renderCurrentVoiceScreen();
 }
@@ -5279,6 +5335,7 @@ function renderCooking() {
   const idx = appState.cookingIndex;
   const step = appState.recipe.cookingSteps[idx];
   const hasTimer = Number.isInteger(step.timerSeconds) && step.timerSeconds > 0;
+  const cookingVoiceAvailable = Boolean(appState.voiceEnabled && isVoiceRecognitionAllowedOnScreen("cooking"));
   recordCookingVoiceDebugEvent("cooking-step-entered", {
     cookingIndex: idx,
     timerStatus: appState.timerStatus,
@@ -5299,6 +5356,22 @@ function renderCooking() {
     consumedCommandKey: appState.cookingVoiceConsumedCommandKey || "",
     commandLockUntil: appState.voiceCommandLockUntil || 0,
     screenMode: getVoiceScreenMode()
+  });
+  recordCookingVoiceDebugEvent(
+    cookingVoiceAvailable ? "cooking-voice-enabled-on-step-enter" : "cooking-voice-disabled-on-step-enter",
+    {
+      cookingIndex: idx,
+      timerStatus: appState.timerStatus,
+      hasTimer,
+      voiceEnabled: appState.voiceEnabled,
+      voiceListening: appState.voiceListening,
+      voiceOutputSpeaking: appState.voiceOutputSpeaking,
+      screenMode: getVoiceScreenMode()
+    }
+  );
+  recordCookingVoicePanelState("step-enter", {
+    cookingIndex: idx,
+    hasTimer
   });
 
   const { page, header, content, footer } = createPageShell("cooking-screen cooking-container page-shell--guided");
@@ -5658,6 +5731,12 @@ window.addEventListener("kitchenpilot:voice-speech-start", () => {
     });
   }
   setVoiceOutputSpeaking(true);
+  if (appState.currentScreen === "cooking") {
+    recordCookingVoicePanelState("speech-start", {
+      cookingIndex: appState.cookingIndex,
+      timerStatus: appState.timerStatus
+    });
+  }
 });
 
 window.addEventListener("kitchenpilot:voice-speech-end", () => {
@@ -5685,6 +5764,10 @@ window.addEventListener("kitchenpilot:voice-speech-end", () => {
     return;
   }
   if (appState.currentScreen === "cooking") {
+    recordCookingVoicePanelState("speech-end", {
+      cookingIndex: appState.cookingIndex,
+      timerStatus: appState.timerStatus
+    });
     ensureCookingVoiceReady("cooking-step-speech-ended", {
       cookingIndex: appState.cookingIndex,
       timerStatus: appState.timerStatus
