@@ -18,6 +18,7 @@ const appState = {
   voiceEnabled: false,
   voiceUnlocked: false,
   voiceListening: false,
+  voiceRecognitionSessionId: 0,
   voiceUserSpeaking: false,
   voiceOutputSpeaking: false,
   voiceErrorMessage: "",
@@ -45,6 +46,9 @@ const appState = {
   voiceCommandLockUntil: 0,
   voiceCommandLockReason: "",
   voiceDebugEvents: [],
+  cookingVoiceConsumedSessionId: 0,
+  cookingVoiceConsumedCommandKey: "",
+  cookingVoiceConsumedTranscript: "",
   lastSpokenPreparationIndex: null,
   lastSpokenCookingIndex: null,
   voiceHintMessage: "",
@@ -130,7 +134,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v86"; 
+const BUILD_VERSION = "DEV BUILD: v88"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -529,6 +533,13 @@ function recordPreparationVoiceDebugEvent(type, payload = {}) {
   recordVoiceDebugEvent(type, payload);
 }
 
+function recordCookingVoiceDebugEvent(type, payload = {}) {
+  if (getVoiceScreenMode(payload.screen || appState.currentScreen) !== "cooking") {
+    return;
+  }
+  recordVoiceDebugEvent(type, payload);
+}
+
 function normalizeVoiceCommandText(text) {
   return String(text || "")
     .toLowerCase()
@@ -741,17 +752,155 @@ function logVoiceCommandMatch(commandKey, transcript, timing = {}) {
   });
 }
 
+function resetCookingVoiceLiveState(reason = "reset") {
+  appState.voiceHeard = "";
+  appState.voiceLastTranscript = "";
+  appState.voiceLastTranscriptAt = 0;
+  appState.voiceLastMatchedCommand = "";
+  appState.voiceLastAction = "";
+  appState.voiceExecuting = false;
+  setVoiceCommandStatus("", 0);
+  recordCookingVoiceDebugEvent("cooking-live-state-reset", {
+    reason
+  });
+}
+
+function expireCookingVoiceResult(commandKey, transcript) {
+  appState.cookingVoiceConsumedSessionId = Number(appState.voiceRecognitionSessionId || 0);
+  appState.cookingVoiceConsumedCommandKey = commandKey || "";
+  appState.cookingVoiceConsumedTranscript = normalizeVoiceCommandText(transcript);
+  recordCookingVoiceDebugEvent("cooking-session-expired", {
+    commandKey: appState.cookingVoiceConsumedCommandKey,
+    transcript: appState.cookingVoiceConsumedTranscript,
+    speechSessionId: appState.cookingVoiceConsumedSessionId
+  });
+}
+
+function shouldIgnoreConsumedCookingVoiceResult(transcript, commandKey = "") {
+  if (getVoiceScreenMode() !== "cooking") {
+    return false;
+  }
+
+  const currentSessionId = Number(appState.voiceRecognitionSessionId || 0);
+  if (!currentSessionId || currentSessionId !== Number(appState.cookingVoiceConsumedSessionId || 0)) {
+    return false;
+  }
+  const normalizedTranscript = normalizeVoiceCommandText(transcript);
+  const consumedTranscript = appState.cookingVoiceConsumedTranscript || "";
+  const consumedCommandKey = appState.cookingVoiceConsumedCommandKey || "";
+
+  recordCookingVoiceDebugEvent("cooking-command-rejected", {
+    reason: "consumed-session",
+    commandKey: commandKey || consumedCommandKey,
+    transcript: normalizedTranscript,
+    speechSessionId: currentSessionId
+  });
+  resetCookingVoiceLiveState("consumed-session-ignored");
+  return true;
+}
+
+function canExecuteCookingVoiceCommand(commandKey) {
+  if (getVoiceScreenMode() !== "cooking") {
+    return false;
+  }
+
+  if (appState.voiceOutputSpeaking) {
+    recordCookingVoiceDebugEvent("cooking-command-rejected", {
+      reason: "app-speaking",
+      commandKey,
+      transcript: appState.voiceLastTranscript || appState.voiceHeard || ""
+    });
+    resetCookingVoiceLiveState("app-speaking");
+    return false;
+  }
+
+  if (commandKey === "skip_timer") {
+    const step = getCurrentCookingStep();
+    const hasTimer = Boolean(step && Number.isInteger(step.timerSeconds) && step.timerSeconds > 0);
+    if (!hasTimer || canProceedFromTimerStep()) {
+      recordCookingVoiceDebugEvent("cooking-command-rejected", {
+        reason: "skip-timer-unavailable",
+        commandKey,
+        transcript: appState.voiceLastTranscript || appState.voiceHeard || ""
+      });
+      resetCookingVoiceLiveState("skip-timer-unavailable");
+      return false;
+    }
+  }
+
+  if (commandKey === "next" && !canProceedFromTimerStep()) {
+    recordCookingVoiceDebugEvent("cooking-command-rejected", {
+      reason: "timer-running",
+      commandKey,
+      transcript: appState.voiceLastTranscript || appState.voiceHeard || ""
+    });
+    setVoiceHint("Timer is still running. Say skip timer or wait.", 2200);
+    if (appState.currentScreen === "cooking") {
+      renderCooking();
+    }
+    resetCookingVoiceLiveState("timer-running");
+    return false;
+  }
+
+  return true;
+}
+
+function executeCookingVoiceCommand(commandKey, transcript, timing = {}) {
+  if (!canExecuteCookingVoiceCommand(commandKey)) {
+    return false;
+  }
+
+  const normalizedTranscript = normalizeVoiceCommandText(transcript);
+  appState.voiceLastMatchedCommand = commandKey;
+  appState.voiceLastAction = commandKey;
+  appState.voiceLastAcceptedCommandAt = Number.isFinite(timing.transcriptReceivedAt)
+    ? timing.transcriptReceivedAt
+    : getVoiceTimestamp();
+  appState.voiceLastAcceptedCommandScreen = appState.currentScreen;
+  appState.voiceLastAcceptedCommandTranscript = normalizedTranscript;
+
+  recordCookingVoiceDebugEvent("cooking-command-accepted", {
+    commandKey,
+    transcript: normalizedTranscript,
+    speechSessionId: Number(appState.voiceRecognitionSessionId || 0)
+  });
+
+  if (commandKey === "repeat") {
+    repeatCurrentCookingStep();
+    recordCookingVoiceDebugEvent("step-advanced", {
+      source: "voice-repeat",
+      cookingIndex: appState.cookingIndex,
+      advanced: false
+    });
+  } else if (commandKey === "skip_timer") {
+    skipTimerAndAdvance();
+    recordCookingVoiceDebugEvent("timer-skipped", {
+      source: "voice-skip-timer",
+      cookingIndex: appState.cookingIndex
+    });
+    recordCookingVoiceDebugEvent("step-advanced", {
+      source: "voice-skip-timer",
+      cookingIndex: appState.cookingIndex
+    });
+  } else if (commandKey === "next") {
+    goToNextCookingStep();
+    recordCookingVoiceDebugEvent("step-advanced", {
+      source: "voice-next",
+      cookingIndex: appState.cookingIndex
+    });
+  }
+
+  expireCookingVoiceResult(commandKey, normalizedTranscript);
+  resetCookingVoiceLiveState("command-executed");
+  return true;
+}
+
 function isVoiceUiActive() {
   return Boolean(isVoiceRecognitionAllowedOnScreen() && (appState.voiceUserSpeaking || appState.voiceOutputSpeaking));
 }
 
 function isVoiceRecognitionAllowedOnScreen(screenName = appState.currentScreen) {
-  // In click-only intro debug mode, keep intro screens visually and functionally
-  // out of the live recognition loop so they do not react like active voice screens.
-  if (INTRO_SCREENS_CLICK_ONLY_DEBUG && isIntroScreen(screenName)) {
-    return false;
-  }
-  return isGuidanceScreen(screenName);
+  return getVoiceScreenMode(screenName) !== "off";
 }
 
 function syncVoiceIndicatorBars() {
@@ -980,6 +1129,19 @@ function isGuidanceScreen(screenName) {
     screenName === "cooking" ||
     screenName === "timerActive" ||
     screenName === "cookingIntro";
+}
+
+function getVoiceScreenMode(screenName = appState.currentScreen) {
+  if (screenName === "ingredients") {
+    return "ingredients";
+  }
+  if (screenName === "preparation") {
+    return "preparation";
+  }
+  if (screenName === "cooking") {
+    return "cooking";
+  }
+  return "off";
 }
 
 function isIntroScreen(screenName = appState.currentScreen) {
@@ -1306,6 +1468,11 @@ function setScreen(screenName) {
     appState.voicePreparationStepEnteredAt = 0;
     appState.voicePreparationAcceptCommandsAt = 0;
   }
+  if (screenName !== "cooking") {
+    appState.cookingVoiceConsumedSessionId = 0;
+    appState.cookingVoiceConsumedCommandKey = "";
+    appState.cookingVoiceConsumedTranscript = "";
+  }
   recordVoiceDebugEvent("screen-change", {
     previousScreen,
     nextScreen: screenName,
@@ -1470,6 +1637,9 @@ function setScreen(screenName) {
       renderCookingIntro();
       break;
     case "cooking":
+      appState.cookingVoiceConsumedSessionId = 0;
+      appState.cookingVoiceConsumedCommandKey = "";
+      appState.cookingVoiceConsumedTranscript = "";
       renderCooking();
       break;
     case "timerActive":
@@ -1859,6 +2029,8 @@ function findIngredientIndexFromVoice(commandText) {
 }
 
 function createVoiceActivationCard(enableMessage) {
+  const voiceScreenMode = getVoiceScreenMode();
+  const voiceAvailableOnScreen = voiceScreenMode !== "off";
   const voiceCard = createCard();
   voiceCard.classList.add("voice-card");
 
@@ -1875,17 +2047,20 @@ function createVoiceActivationCard(enableMessage) {
 
   const voiceSwitchLabel = document.createElement("label");
   voiceSwitchLabel.className = "mic-switch";
-  if (appState.voiceListening && isVoiceRecognitionAllowedOnScreen()) {
+  if (appState.voiceListening && voiceAvailableOnScreen) {
     voiceSwitchLabel.classList.add("listening");
   }
   voiceSwitchLabel.setAttribute("aria-label", "Toggle voice commands");
 
   const voiceToggleInput = document.createElement("input");
   voiceToggleInput.type = "checkbox";
-  voiceToggleInput.checked = appState.voiceEnabled && isVoiceRecognitionAllowedOnScreen();
-  voiceToggleInput.disabled = !SpeechRecognition || !isVoiceRecognitionAllowedOnScreen();
+  voiceToggleInput.checked = appState.voiceEnabled && voiceAvailableOnScreen;
+  voiceToggleInput.disabled = !SpeechRecognition || !voiceAvailableOnScreen;
   voiceToggleInput.addEventListener("click", (event) => {
     event.preventDefault();
+    if (!voiceAvailableOnScreen) {
+      return;
+    }
     const nextEnabled = !appState.voiceEnabled;
     setVoiceEnabled(nextEnabled, {
       hintMessage: enableMessage,
@@ -1906,6 +2081,8 @@ function createVoiceActivationCard(enableMessage) {
 }
 
 function createCompactVoiceStrip(options = {}) {
+  const voiceScreenMode = getVoiceScreenMode();
+  const voiceAvailableOnScreen = voiceScreenMode !== "off";
   const {
     hintMessage = "Voice commands enabled. Say: Next, Repeat, Pause.",
     hintMs = 2200,
@@ -1918,7 +2095,7 @@ function createCompactVoiceStrip(options = {}) {
 
   const voiceRow = document.createElement("div");
   voiceRow.className = "header-row row-2 voice-panel compact-voice";
-  if (appState.voiceEnabled) {
+  if (appState.voiceEnabled && voiceAvailableOnScreen) {
     voiceRow.classList.add("voice-active");
   } else {
     voiceRow.classList.add("voice-off", "voice-panel--cta");
@@ -1935,13 +2112,15 @@ function createCompactVoiceStrip(options = {}) {
   voiceIcon.setAttribute("aria-hidden", "true");
 
   const voiceText = document.createElement("span");
-  voiceText.textContent = appState.voiceEnabled
+  voiceText.textContent = !voiceAvailableOnScreen
+    ? "Voice unavailable on this screen"
+    : appState.voiceEnabled
     ? (showListeningText && appState.voiceListening ? "Voice listening" : "Voice")
     : "Enable voice control";
   voiceLabel.append(voiceIcon, voiceText);
 
   const enableVoiceFromPanel = () => {
-    if (appState.voiceEnabled) {
+    if (!voiceAvailableOnScreen || appState.voiceEnabled) {
       return;
     }
 
@@ -1960,7 +2139,7 @@ function createCompactVoiceStrip(options = {}) {
     });
   };
 
-  if (!appState.voiceEnabled) {
+  if (!appState.voiceEnabled && voiceAvailableOnScreen) {
     voiceRow.setAttribute("role", "button");
     voiceRow.setAttribute("tabindex", "0");
     voiceRow.setAttribute("aria-label", "Enable voice control");
@@ -1975,17 +2154,20 @@ function createCompactVoiceStrip(options = {}) {
 
   const voiceSwitchLabel = document.createElement("label");
   voiceSwitchLabel.className = "mic-switch";
-  if (animateListening && appState.voiceListening) {
+  if (animateListening && appState.voiceListening && voiceAvailableOnScreen) {
     voiceSwitchLabel.classList.add("listening");
   }
   voiceSwitchLabel.setAttribute("aria-label", "Toggle voice commands");
 
   const voiceToggleInput = document.createElement("input");
   voiceToggleInput.type = "checkbox";
-  voiceToggleInput.checked = appState.voiceEnabled;
-  voiceToggleInput.disabled = !SpeechRecognition;
+  voiceToggleInput.checked = appState.voiceEnabled && voiceAvailableOnScreen;
+  voiceToggleInput.disabled = !SpeechRecognition || !voiceAvailableOnScreen;
   voiceToggleInput.addEventListener("click", (event) => {
     event.preventDefault();
+    if (!voiceAvailableOnScreen) {
+      return;
+    }
     const nextEnabled = !appState.voiceEnabled;
     setVoiceEnabled(nextEnabled, {
       hintMessage,
@@ -2631,6 +2813,10 @@ function shouldIgnoreIntroCommand(commandText, timing = {}) {
 }
 
 function handleVoiceCommand(commandText, options = {}) {
+  if (getVoiceScreenMode() === "off") {
+    return;
+  }
+
   const command = normalizeVoiceCommandText(commandText);
   const timing = {
     transcriptReceivedAt: options.transcriptReceivedAt ?? null,
@@ -2639,6 +2825,26 @@ function handleVoiceCommand(commandText, options = {}) {
     commandKey: options.commandKey || null,
     matchedAt: null
   };
+
+  if (getVoiceScreenMode() === "cooking") {
+    const cookingCommandMap = {
+      next: "next",
+      repeat: "repeat",
+      "skip timer": "skip_timer"
+    };
+    const cookingCommandKey = cookingCommandMap[command] || "";
+    if (!cookingCommandKey) {
+      recordCookingVoiceDebugEvent("cooking-command-rejected", {
+        reason: "invalid-command",
+        commandKey: "",
+        transcript: command
+      });
+      resetCookingVoiceLiveState("invalid-command");
+      return;
+    }
+    executeCookingVoiceCommand(cookingCommandKey, commandText, timing);
+    return;
+  }
 
   if (shouldIgnoreIntroCommand(commandText, timing)) {
     return;
@@ -2963,6 +3169,14 @@ function startVoiceCommands() {
   appState.voiceEnabled = true;
   appState.voiceErrorMessage = "";
 
+  if (getVoiceScreenMode() === "off") {
+    appState.voiceListening = false;
+    clearVoiceRecognitionActivity();
+    setVoiceCommandStatus("", 0);
+    renderCurrentVoiceScreen();
+    return;
+  }
+
   if (appState.voiceListening) {
     renderCurrentVoiceScreen();
     return;
@@ -2992,10 +3206,32 @@ function startVoiceCommands() {
         return;
       }
 
+      const fastCommand = getFastVoiceCommand(latestTranscript);
+      if (getVoiceScreenMode() === "cooking" && shouldIgnoreConsumedCookingVoiceResult(latestTranscript, fastCommand?.key || "")) {
+        return;
+      }
+
       const transcriptTiming = logVoiceTranscriptArrival(latestTranscript, {
         source: latestIsFinal ? "final" : "interim",
         isFinal: latestIsFinal
       });
+
+      if (getVoiceScreenMode() === "off") {
+        appState.voiceHeard = "";
+        clearVoiceRecognitionActivity();
+        setVoiceCommandStatus("", 0);
+        return;
+      }
+
+      if (getVoiceScreenMode() === "cooking" && appState.voiceOutputSpeaking) {
+        recordCookingVoiceDebugEvent("cooking-command-rejected", {
+          reason: "app-speaking",
+          commandKey: fastCommand?.key || "",
+          transcript: normalizeVoiceCommandText(latestTranscript)
+        });
+        resetCookingVoiceLiveState("app-speaking-result");
+        return;
+      }
 
       const ignoredPreparationReason = shouldIgnorePreparationTranscript(latestTranscript, transcriptTiming);
       if (ignoredPreparationReason) {
@@ -3008,9 +3244,8 @@ function startVoiceCommands() {
       setVoiceCommandStatus(`Heard: ${heardLabel}`, latestIsFinal ? 1000 : 350);
       renderCurrentVoiceScreen();
 
-      const fastCommand = getFastVoiceCommand(latestTranscript);
       if (fastCommand) {
-        if (shouldSuppressDuplicateVoiceCommand(fastCommand.key, latestTranscript)) {
+        if (getVoiceScreenMode() !== "cooking" && shouldSuppressDuplicateVoiceCommand(fastCommand.key, latestTranscript)) {
           return;
         }
 
@@ -3053,6 +3288,7 @@ function startVoiceCommands() {
       if (!appState.voiceEnabled) {
         return;
       }
+      appState.voiceRecognitionSessionId += 1;
       setVoiceRecognitionActivity(true);
     };
 
@@ -3070,7 +3306,7 @@ function startVoiceCommands() {
       });
       recordCookingIntroDebugEvent("recognition-end", {
         voiceEnabled: appState.voiceEnabled,
-        willAttemptRestart: Boolean(appState.voiceEnabled && isGuidanceScreen(appState.currentScreen))
+        willAttemptRestart: Boolean(appState.voiceEnabled && isVoiceRecognitionAllowedOnScreen(appState.currentScreen))
       }, {
         referenceTime: appState.voiceLastRecognitionEndAt
       });
@@ -3214,9 +3450,14 @@ function createVoiceIndicatorBar(targetScreen) {
   const trigger = document.createElement("button");
   trigger.type = "button";
   trigger.className = "voice-indicator-bar";
-  const voiceStateClass = !appState.voiceEnabled ? "voice-off" : isVoiceUiActive() ? "voice-active" : "voice-idle";
+  const voiceScreenMode = getVoiceScreenMode(targetScreen);
+  const voiceAvailableOnScreen = voiceScreenMode !== "off";
+  const voiceStateClass = !appState.voiceEnabled || !voiceAvailableOnScreen ? "voice-off" : isVoiceUiActive() ? "voice-active" : "voice-idle";
   trigger.classList.add(voiceStateClass);
-  trigger.setAttribute("aria-label", !appState.voiceEnabled ? "Enable voice control" : "Open voice settings");
+  trigger.setAttribute("aria-label", !voiceAvailableOnScreen ? "Voice unavailable on this screen" : !appState.voiceEnabled ? "Enable voice control" : "Open voice settings");
+  if (!voiceAvailableOnScreen) {
+    trigger.disabled = true;
+  }
 
   const bars = document.createElement("div");
   bars.className = "voice-bars";
@@ -3228,13 +3469,16 @@ function createVoiceIndicatorBar(targetScreen) {
   }
 
   trigger.appendChild(bars);
-  if (!appState.voiceEnabled) {
+  if (!appState.voiceEnabled || !voiceAvailableOnScreen) {
     const label = document.createElement("span");
     label.className = "voice-indicator-text";
-    label.textContent = "Enable voice control";
+    label.textContent = voiceAvailableOnScreen ? "Enable voice control" : "Voice unavailable";
     trigger.appendChild(label);
   }
   trigger.addEventListener("click", () => {
+    if (!voiceAvailableOnScreen) {
+      return;
+    }
     if (!appState.voiceEnabled) {
       if (!appState.voiceUnlocked) {
         unlockVoiceAssistant({
@@ -4386,7 +4630,7 @@ function renderIngredientsIntro() {
   header.append(title, stageLabel);
   main.append(recipeIcon, description);
   main.appendChild(createCompactVoiceStrip({
-    hintMessage: "Voice enabled. You can say: Check garlic, check onions.",
+    hintMessage: "Voice commands are disabled on this intro. Tap Next to continue.",
     hintMs: 2200,
     showListeningText: false,
     animateListening: false,
@@ -4456,7 +4700,7 @@ function renderPreparationIntro() {
 
   header.append(title, stageLabel);
   main.append(recipeIcon, description);
-  main.appendChild(createVoiceActivationCard("Voice enabled. You can say: Next, Repeat, Back."));
+  main.appendChild(createVoiceActivationCard("Voice commands are disabled on this intro. Tap Next to continue."));
   if (isVoiceDebugUiEnabled()) {
     footer.appendChild(createVoiceDebugCopyButton());
   }
