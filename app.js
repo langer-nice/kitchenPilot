@@ -130,7 +130,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v85"; 
+const BUILD_VERSION = "DEV BUILD: v86"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -742,11 +742,24 @@ function logVoiceCommandMatch(commandKey, transcript, timing = {}) {
 }
 
 function isVoiceUiActive() {
-  return Boolean(appState.voiceUserSpeaking || appState.voiceOutputSpeaking);
+  return Boolean(isVoiceRecognitionAllowedOnScreen() && (appState.voiceUserSpeaking || appState.voiceOutputSpeaking));
+}
+
+function isVoiceRecognitionAllowedOnScreen(screenName = appState.currentScreen) {
+  // In click-only intro debug mode, keep intro screens visually and functionally
+  // out of the live recognition loop so they do not react like active voice screens.
+  if (INTRO_SCREENS_CLICK_ONLY_DEBUG && isIntroScreen(screenName)) {
+    return false;
+  }
+  return isGuidanceScreen(screenName);
 }
 
 function syncVoiceIndicatorBars() {
-  const stateClass = !appState.voiceEnabled ? "voice-off" : isVoiceUiActive() ? "voice-active" : "voice-idle";
+  const stateClass = !appState.voiceEnabled || !isVoiceRecognitionAllowedOnScreen()
+    ? "voice-off"
+    : isVoiceUiActive()
+      ? "voice-active"
+      : "voice-idle";
   const indicators = document.querySelectorAll(".voice-indicator-bar");
 
   indicators.forEach((indicator) => {
@@ -765,6 +778,10 @@ function setVoiceUserSpeaking(isSpeaking) {
 }
 
 function setVoiceRecognitionActivity(isActive) {
+  if (!isVoiceRecognitionAllowedOnScreen()) {
+    clearVoiceRecognitionActivity();
+    return;
+  }
   setVoiceUserSpeaking(isActive);
 }
 
@@ -783,12 +800,30 @@ function clearDeferredPreparationSpeech() {
   }
 }
 
+function suspendVoiceRecognitionForCurrentScreen(reason = "screen-voice-disabled") {
+  appState.voiceListening = false;
+  clearVoiceRecognitionActivity();
+  clearVoiceCommandLock(reason);
+  setVoiceCommandStatus("", 0);
+  if (voiceRecognition) {
+    try {
+      voiceRecognition.stop();
+    } catch {
+      // Ignore stop errors when recognition is not active.
+    }
+  }
+}
+
 function resetVoiceActivityState() {
   clearVoiceRecognitionActivity();
   setVoiceOutputSpeaking(false);
 }
 
 function pulseVoiceRecognitionActivity(durationMs = 700) {
+  if (!isVoiceRecognitionAllowedOnScreen()) {
+    clearVoiceRecognitionActivity();
+    return;
+  }
   setVoiceUserSpeaking(true);
 
   if (appState.voiceUserSpeakingTimeoutId) {
@@ -1398,6 +1433,8 @@ function setScreen(screenName) {
     appState.lastSpokenCookingIndex = null;
     stopVoiceCommands();
     stopTimer();
+  } else if (appState.voiceEnabled && !isVoiceRecognitionAllowedOnScreen(screenName)) {
+    suspendVoiceRecognitionForCurrentScreen("intro-click-only-screen");
   }
 
   switch (screenName) {
@@ -1443,6 +1480,10 @@ function setScreen(screenName) {
       break;
     default:
       renderHome();
+  }
+
+  if (appState.voiceEnabled && isVoiceRecognitionAllowedOnScreen(screenName) && !appState.voiceListening) {
+    startVoiceCommands();
   }
 }
 
@@ -1834,15 +1875,15 @@ function createVoiceActivationCard(enableMessage) {
 
   const voiceSwitchLabel = document.createElement("label");
   voiceSwitchLabel.className = "mic-switch";
-  if (appState.voiceListening) {
+  if (appState.voiceListening && isVoiceRecognitionAllowedOnScreen()) {
     voiceSwitchLabel.classList.add("listening");
   }
   voiceSwitchLabel.setAttribute("aria-label", "Toggle voice commands");
 
   const voiceToggleInput = document.createElement("input");
   voiceToggleInput.type = "checkbox";
-  voiceToggleInput.checked = appState.voiceEnabled;
-  voiceToggleInput.disabled = !SpeechRecognition;
+  voiceToggleInput.checked = appState.voiceEnabled && isVoiceRecognitionAllowedOnScreen();
+  voiceToggleInput.disabled = !SpeechRecognition || !isVoiceRecognitionAllowedOnScreen();
   voiceToggleInput.addEventListener("click", (event) => {
     event.preventDefault();
     const nextEnabled = !appState.voiceEnabled;
@@ -3039,7 +3080,7 @@ function startVoiceCommands() {
       });
       appState.voiceListening = false;
       clearVoiceRecognitionActivity();
-      if (appState.voiceEnabled && isGuidanceScreen(appState.currentScreen)) {
+      if (appState.voiceEnabled && isVoiceRecognitionAllowedOnScreen(appState.currentScreen)) {
         appState.voiceLastRecognitionRestartRequestAt = getVoiceTimestamp();
         setVoiceCommandStatus("Listening...", 0);
         try {
@@ -4473,7 +4514,11 @@ function renderCookingIntro() {
 
   header.append(title, stageLabel);
   main.append(recipeIcon);
-  main.appendChild(createVoiceActivationCard("Voice enabled. You can say: Next, Repeat, Pause."));
+  main.appendChild(createVoiceActivationCard(
+    INTRO_SCREENS_CLICK_ONLY_DEBUG
+      ? "Voice commands are disabled on this intro. Tap Next to continue."
+      : "Voice enabled. You can say: Next, Repeat, Pause."
+  ));
   if (isVoiceDebugUiEnabled()) {
     footer.appendChild(createVoiceDebugCopyButton());
   }
