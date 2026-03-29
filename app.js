@@ -134,7 +134,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v90"; 
+const BUILD_VERSION = "DEV BUILD: v91"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -784,6 +784,18 @@ function clearCookingConsumedVoiceState(reason = "clear", payload = {}) {
     reason,
     ...payload
   });
+  console.warn("[cooking-debug] cooking-voice-ready-after-timer", {
+    reason,
+    screen: appState.currentScreen,
+    cookingIndex: appState.cookingIndex,
+    timerStatus: appState.timerStatus,
+    voiceListening: appState.voiceListening,
+    voiceOutputSpeaking: appState.voiceOutputSpeaking,
+    liveTranscript: appState.voiceLastTranscript || appState.voiceHeard || "",
+    liveCommand: appState.voiceLastMatchedCommand || "",
+    screenMode: getVoiceScreenMode(),
+    ...payload
+  });
 }
 
 function shouldIgnoreConsumedCookingVoiceResult(transcript, commandKey = "") {
@@ -840,6 +852,17 @@ function canExecuteCookingVoiceCommand(commandKey) {
         reason: "app-speaking",
         transcript: appState.voiceLastTranscript || appState.voiceHeard || ""
       });
+      console.warn("[cooking-debug] cooking-voice-next-blocked", {
+        reason: "app-speaking",
+        screen: appState.currentScreen,
+        cookingIndex: appState.cookingIndex,
+        timerStatus: appState.timerStatus,
+        voiceListening: appState.voiceListening,
+        voiceOutputSpeaking: appState.voiceOutputSpeaking,
+        liveTranscript: appState.voiceLastTranscript || appState.voiceHeard || "",
+        liveCommand: appState.voiceLastMatchedCommand || "",
+        screenMode: getVoiceScreenMode()
+      });
     }
     resetCookingVoiceLiveState("app-speaking");
     return false;
@@ -870,6 +893,17 @@ function canExecuteCookingVoiceCommand(commandKey) {
         reason: "timer-running",
         transcript: appState.voiceLastTranscript || appState.voiceHeard || ""
       });
+      console.warn("[cooking-debug] cooking-voice-next-blocked", {
+        reason: "timer-running",
+        screen: appState.currentScreen,
+        cookingIndex: appState.cookingIndex,
+        timerStatus: appState.timerStatus,
+        voiceListening: appState.voiceListening,
+        voiceOutputSpeaking: appState.voiceOutputSpeaking,
+        liveTranscript: appState.voiceLastTranscript || appState.voiceHeard || "",
+        liveCommand: appState.voiceLastMatchedCommand || "",
+        screenMode: getVoiceScreenMode()
+      });
     }
     setVoiceHint("Timer is still running. Say skip timer or wait.", 2200);
     if (appState.currentScreen === "cooking") {
@@ -888,6 +922,20 @@ function executeCookingVoiceCommand(commandKey, transcript, timing = {}) {
   }
 
   const normalizedTranscript = normalizeVoiceCommandText(transcript);
+  if (commandKey === "next") {
+    console.warn("[cooking-debug] cooking-voice-next-received", {
+      transcript: normalizedTranscript,
+      screen: appState.currentScreen,
+      cookingIndex: appState.cookingIndex,
+      timerStatus: appState.timerStatus,
+      voiceListening: appState.voiceListening,
+      voiceOutputSpeaking: appState.voiceOutputSpeaking,
+      liveTranscript: appState.voiceLastTranscript || appState.voiceHeard || "",
+      liveCommand: appState.voiceLastMatchedCommand || "",
+      commandLockUntil: appState.voiceCommandLockUntil || 0,
+      screenMode: getVoiceScreenMode()
+    });
+  }
   appState.voiceLastMatchedCommand = commandKey;
   appState.voiceLastAction = commandKey;
   appState.voiceLastAcceptedCommandAt = Number.isFinite(timing.transcriptReceivedAt)
@@ -2876,6 +2924,22 @@ function handleVoiceCommand(commandText, options = {}) {
       "skip timer": "skip_timer"
     };
     const cookingCommandKey = cookingCommandMap[command] || "";
+    if (cookingCommandKey === "next") {
+      console.warn("[cooking-debug] cooking-voice-next-received", {
+        transcript: command,
+        rawTranscript: commandText,
+        screen: appState.currentScreen,
+        cookingIndex: appState.cookingIndex,
+        timerStatus: appState.timerStatus,
+        voiceListening: appState.voiceListening,
+        voiceOutputSpeaking: appState.voiceOutputSpeaking,
+        liveTranscript: appState.voiceLastTranscript || appState.voiceHeard || "",
+        liveCommand: appState.voiceLastMatchedCommand || "",
+        commandLockUntil: appState.voiceCommandLockUntil || 0,
+        screenMode: getVoiceScreenMode(),
+        source: timing.source || "unknown"
+      });
+    }
     if (!cookingCommandKey) {
       recordCookingVoiceDebugEvent("cooking-command-rejected", {
         reason: "invalid-command",
@@ -5027,6 +5091,16 @@ function startStepTimerIfNeeded(step) {
         liveTranscript: appState.voiceLastTranscript || appState.voiceHeard || "",
         liveCommand: appState.voiceLastMatchedCommand || ""
       });
+      console.warn("[cooking-debug] cooking-timer-finished", {
+        screen: appState.currentScreen,
+        cookingIndex: appState.cookingIndex,
+        timerStatus: appState.timerStatus,
+        voiceListening: appState.voiceListening,
+        voiceOutputSpeaking: appState.voiceOutputSpeaking,
+        liveTranscript: appState.voiceLastTranscript || appState.voiceHeard || "",
+        liveCommand: appState.voiceLastMatchedCommand || "",
+        screenMode: getVoiceScreenMode()
+      });
       clearCookingConsumedVoiceState("timer-finished", {
         cookingIndex: appState.cookingIndex,
         timerStatus: appState.timerStatus
@@ -5187,7 +5261,19 @@ function renderCooking() {
   } else {
     primaryRow.append(
       createButton("Repeat", "primary btn-next", () => repeatCurrentCookingStep(), "repeat"),
-      createButton("Next", "primary btn-next", () => goToNextCookingStep(), "next")
+      createButton("Next", "primary btn-next", () => {
+        console.warn("[cooking-debug] cooking-click-next-triggered", {
+          screen: appState.currentScreen,
+          cookingIndex: appState.cookingIndex,
+          timerStatus: appState.timerStatus,
+          voiceListening: appState.voiceListening,
+          voiceOutputSpeaking: appState.voiceOutputSpeaking,
+          liveTranscript: appState.voiceLastTranscript || appState.voiceHeard || "",
+          liveCommand: appState.voiceLastMatchedCommand || "",
+          screenMode: getVoiceScreenMode()
+        });
+        goToNextCookingStep();
+      }, "next")
     );
   }
 
