@@ -1688,6 +1688,24 @@ button.ghost-action:hover,
   color: var(--color-primary);
 }
 
+.bottom-nav__item.is-disabled,
+.bottom-nav__item:disabled {
+  background: transparent;
+  color: var(--color-text-muted);
+  opacity: 0.6;
+  cursor: default;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+.bottom-nav__item.is-disabled:hover,
+.bottom-nav__item:disabled:hover,
+.bottom-nav__item.is-disabled:active,
+.bottom-nav__item:disabled:active {
+  background: transparent;
+  transform: none;
+}
+
 .bottom-nav__icon {
   font-size: 1rem;
   line-height: 1;
