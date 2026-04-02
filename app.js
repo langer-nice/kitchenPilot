@@ -123,11 +123,7 @@ function updateTimerOverlay() {
   const overlay = ensureTimerOverlay();
   const timerValue = document.getElementById("timer-value");
   const pauseBtn = document.getElementById("timer-pause-btn");
-  const timerIsActive = Boolean(
-    Number.isFinite(appState.activeTimerSeconds) &&
-    appState.activeTimerSeconds >= 0 &&
-    (appState.timerStatus === "running" || appState.timerStatus === "paused")
-  );
+  const timerIsActive = isTimerOverlayActive();
 
   if (!timerIsActive) {
     overlay.classList.add("hidden");
@@ -145,6 +141,14 @@ function updateTimerOverlay() {
   if (pauseBtn) {
     pauseBtn.textContent = appState.timerPaused ? "Resume" : "Pause";
   }
+}
+
+function isTimerOverlayActive() {
+  return Boolean(
+    Number.isFinite(appState.activeTimerSeconds) &&
+    appState.activeTimerSeconds >= 0 &&
+    (appState.timerStatus === "running" || appState.timerStatus === "paused")
+  );
 }
 
 const VOICE_SYSTEM_ENABLED = false;
@@ -228,7 +232,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v99"; 
+const BUILD_VERSION = "DEV BUILD: v100"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -4476,18 +4480,16 @@ function createStageActionRow(backConfig, nextConfig) {
 function createCookingActionArea(options = {}) {
   const {
     timerInteractionActive = false,
-    timerPaused = false,
     canGoBack = true,
     onQuit,
-    onPauseTimer,
     onBack,
     onNext,
-    onSkipTimer,
     onRepeat,
     repeatEnabled = true
   } = options;
 
   const fragment = document.createDocumentFragment();
+  const timerOverlayActive = timerInteractionActive && isTimerOverlayActive();
 
   fragment.appendChild(createActionButtonsRow([
     {
@@ -4496,12 +4498,14 @@ function createCookingActionArea(options = {}) {
       onClick: onQuit,
       actionName: "stop"
     },
-    timerInteractionActive
+    timerOverlayActive
       ? {
-        label: timerPaused ? "Resume Timer" : "Pause Timer",
-        className: "primary",
-        onClick: onPauseTimer,
-        actionName: "pause"
+        label: "Repeat",
+        className: "ghost-action",
+        onClick: onRepeat,
+        actionName: "repeat",
+        disabled: !repeatEnabled,
+        title: repeatEnabled ? "" : "Repeat is not available on this screen"
       }
       : {
         label: "Repeat",
@@ -4521,13 +4525,8 @@ function createCookingActionArea(options = {}) {
       actionName: "back",
       disabled: !canGoBack
     },
-    timerInteractionActive
-      ? {
-        label: "Skip Timer",
-        className: "",
-        onClick: onSkipTimer,
-        actionName: "skip-timer"
-      }
+    timerOverlayActive
+      ? null
       : {
         label: "Next",
         className: "primary",
@@ -5919,13 +5918,8 @@ function renderCooking() {
 
   footer.appendChild(createCookingActionArea({
     timerInteractionActive,
-    timerPaused: appState.timerPaused,
     canGoBack: idx > 0,
     onQuit: () => stopCookingFlow(true),
-    onPauseTimer: () => {
-      toggleGuidancePause();
-      renderCooking();
-    },
     onBack: () => goToPreviousCookingStep(),
     onNext: () => {
       recordCookingVoiceDebugEvent("cooking-click-next-triggered-after-timer", {
@@ -5946,9 +5940,6 @@ function renderCooking() {
         screenMode: getVoiceScreenMode()
       });
       goToNextCookingStep();
-    },
-    onSkipTimer: () => {
-      skipTimerAndAdvance();
     },
     onRepeat: () => repeatCurrentCookingStep(),
     repeatEnabled: true
@@ -6050,18 +6041,10 @@ function renderTimerActive() {
 
   footer.appendChild(createCookingActionArea({
     timerInteractionActive,
-    timerPaused: appState.timerPaused,
     canGoBack: idx > 0,
     onQuit: () => stopCookingFlow(true),
-    onPauseTimer: () => {
-      toggleGuidancePause();
-      renderTimerActive();
-    },
     onBack: () => goToPreviousCookingStep(),
     onNext: () => goToNextCookingStep(),
-    onSkipTimer: () => {
-      skipTimerAndAdvance();
-    },
     onRepeat: () => repeatCurrentCookingStep(),
     repeatEnabled: !timerInteractionActive
   }));
