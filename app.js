@@ -143,7 +143,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v94"; 
+const BUILD_VERSION = "DEV BUILD: v95"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -1973,6 +1973,9 @@ function setScreen(screenName) {
       break;
     case "home":
       renderHome();
+      break;
+    case "menu":
+      renderMenu();
       break;
     case "analysis":
       renderAnalysis();
@@ -4156,17 +4159,25 @@ function createPageShell(screenClassName = "") {
   const content = document.createElement("div");
   content.className = "page-content";
 
+  const pageFooter = document.createElement("div");
+  pageFooter.className = "page-footer";
+
   const footer = document.createElement("div");
   footer.className = "action-bar";
 
-  page.append(header, content, footer);
+  pageFooter.append(
+    footer,
+    createBottomNavigation(getBottomNavSection())
+  );
+
+  page.append(header, content, pageFooter);
   appEl.appendChild(page);
 
   if (isVoiceDebugUiEnabled()) {
     header.appendChild(createVoiceDebugCopyButton());
   }
 
-  return { page, header, content, footer };
+  return { page, header, content, footer, pageFooter };
 }
 
 function createTitledPage(title, subtitle, screenClassName = "") {
@@ -4184,6 +4195,234 @@ function createTitledPage(title, subtitle, screenClassName = "") {
   }
 
   return shell;
+}
+
+function createStageScreenShell(options = {}) {
+  const { screenClassName = "", navSection = getBottomNavSection() } = options;
+
+  appEl.innerHTML = "";
+
+  const screen = document.createElement("div");
+  screen.className = ["screen", "stage-screen", screenClassName].filter(Boolean).join(" ");
+
+  const header = document.createElement("div");
+  header.className = "stage-screen__header";
+
+  const main = document.createElement("div");
+  main.className = "stage-screen__main";
+
+  const pageFooter = document.createElement("div");
+  pageFooter.className = "page-footer";
+
+  const footer = document.createElement("div");
+  footer.className = "action-bar action-bar--stage";
+
+  pageFooter.append(
+    footer,
+    createBottomNavigation(navSection)
+  );
+
+  screen.append(header, main, pageFooter);
+  appEl.appendChild(screen);
+
+  if (isVoiceDebugUiEnabled()) {
+    header.appendChild(createVoiceDebugCopyButton());
+  }
+
+  return { screen, header, main, footer, pageFooter };
+}
+
+function getBottomNavSection(screenName = appState.currentScreen) {
+  if (screenName === "home") {
+    return "home";
+  }
+
+  if (screenName === "menu") {
+    return "menu";
+  }
+
+  if (
+    screenName === "analysis" ||
+    screenName === "ingredientsIntro" ||
+    screenName === "ingredients" ||
+    screenName === "preparationIntro" ||
+    screenName === "preparation"
+  ) {
+    return "ingredients";
+  }
+
+  if (
+    screenName === "cookingIntro" ||
+    screenName === "cooking" ||
+    screenName === "timerActive" ||
+    screenName === "completed"
+  ) {
+    return "cooking";
+  }
+
+  return null;
+}
+
+function getBottomNavTarget(sectionKey) {
+  if (sectionKey === "home") {
+    return "home";
+  }
+
+  if (sectionKey === "menu") {
+    return "menu";
+  }
+
+  if (!appState.recipe) {
+    return "home";
+  }
+
+  if (sectionKey === "ingredients") {
+    return "ingredientsIntro";
+  }
+
+  if (sectionKey === "cooking") {
+    return "cookingIntro";
+  }
+
+  return "home";
+}
+
+function navigateToPrimarySection(sectionKey) {
+  const targetScreen = getBottomNavTarget(sectionKey);
+  setScreen(targetScreen);
+}
+
+function createBottomNavigation(activeSection) {
+  const nav = document.createElement("nav");
+  nav.className = "bottom-nav";
+  nav.setAttribute("aria-label", "Primary");
+
+  const items = [
+    { key: "home", label: "Home", iconClass: "fa-solid fa-house" },
+    { key: "ingredients", label: "Ingredients", iconClass: "fa-solid fa-list-check" },
+    { key: "cooking", label: "Cooking", iconClass: "fa-solid fa-fire-burner" },
+    { key: "menu", label: "Menu", iconClass: "fa-solid fa-bars" }
+  ];
+
+  items.forEach((item) => {
+    const button = document.createElement("button");
+    const isActive = item.key === activeSection;
+    button.type = "button";
+    button.className = ["bottom-nav__item", isActive ? "is-active" : ""].filter(Boolean).join(" ");
+    button.setAttribute("aria-current", isActive ? "page" : "false");
+    button.addEventListener("click", () => {
+      navigateToPrimarySection(item.key);
+    });
+
+    const icon = document.createElement("i");
+    icon.className = `${item.iconClass} bottom-nav__icon`;
+    icon.setAttribute("aria-hidden", "true");
+
+    const label = document.createElement("span");
+    label.className = "bottom-nav__label";
+    label.textContent = item.label;
+
+    button.append(icon, label);
+    nav.appendChild(button);
+  });
+
+  return nav;
+}
+
+function createActionButtonsRow(buttonConfigs, className = "") {
+  const row = document.createElement("div");
+  row.className = ["action-row", className].filter(Boolean).join(" ");
+
+  buttonConfigs
+    .filter(Boolean)
+    .forEach((config) => {
+      const button = createButton(config.label, config.className || "", config.onClick || (() => {}), config.actionName);
+      if (config.disabled) {
+        button.disabled = true;
+      }
+      if (config.title) {
+        button.title = config.title;
+      }
+      if (config.ariaLabel) {
+        button.setAttribute("aria-label", config.ariaLabel);
+      }
+      row.appendChild(button);
+    });
+
+  return row;
+}
+
+function createStageActionRow(backConfig, nextConfig) {
+  return createActionButtonsRow([
+    backConfig ? { label: "Back", className: "ghost-action", actionName: "back", ...backConfig } : null,
+    nextConfig ? { label: "Next", className: "primary", actionName: "next", ...nextConfig } : null
+  ], "stage-actions stage-actions--two");
+}
+
+function createCookingActionArea(options = {}) {
+  const {
+    timerInteractionActive = false,
+    timerPaused = false,
+    canGoBack = true,
+    onQuit,
+    onPauseTimer,
+    onBack,
+    onNext,
+    onSkipTimer,
+    onRepeat,
+    repeatEnabled = true
+  } = options;
+
+  const fragment = document.createDocumentFragment();
+
+  fragment.appendChild(createActionButtonsRow([
+    {
+      label: "Quit",
+      className: "ghost-action",
+      onClick: onQuit,
+      actionName: "stop"
+    },
+    timerInteractionActive
+      ? {
+        label: timerPaused ? "Resume Timer" : "Pause Timer",
+        className: "primary",
+        onClick: onPauseTimer,
+        actionName: "pause"
+      }
+      : {
+        label: "Repeat",
+        className: "ghost-action",
+        onClick: onRepeat,
+        actionName: "repeat",
+        disabled: !repeatEnabled,
+        title: repeatEnabled ? "" : "Repeat is not available on this screen"
+      }
+  ], "cooking-actions cooking-actions--top"));
+
+  fragment.appendChild(createActionButtonsRow([
+    {
+      label: "Back",
+      className: "ghost-action",
+      onClick: onBack,
+      actionName: "back",
+      disabled: !canGoBack
+    },
+    timerInteractionActive
+      ? {
+        label: "Skip Timer",
+        className: "",
+        onClick: onSkipTimer,
+        actionName: "skip-timer"
+      }
+      : {
+        label: "Next",
+        className: "primary",
+        onClick: onNext,
+        actionName: "next"
+      }
+  ], "cooking-actions cooking-actions--bottom"));
+
+  return fragment;
 }
 
 function getVoiceDebugSnapshot() {
@@ -4325,8 +4564,7 @@ function renderOnboarding() {
 }
 
 function renderHome() {
-  const screen = clearAndSetScreenTitle("KitchenPilot", "Hands-free cooking guide");
-  screen.classList.add("home-screen");
+  const { page, content, footer } = createTitledPage("KitchenPilot", "Hands-free cooking guide", "home-screen");
   let isAnalyzing = false;
   let isReadingScreenshot = false;
   let currentAnalysisController = null;
@@ -4449,9 +4687,6 @@ function renderHome() {
 
   homeMain.append(entrySection, validation);
 
-  const actions = document.createElement("div");
-  actions.className = "button-row";
-
   function hideLoadingOverlay() {
     if (loadingOverlay) {
       loadingOverlay.remove();
@@ -4496,7 +4731,7 @@ function renderHome() {
     }
 
     loadingOverlay.appendChild(panel);
-    screen.appendChild(loadingOverlay);
+    page.appendChild(loadingOverlay);
   }
 
   function clearValidation() {
@@ -4753,8 +4988,10 @@ function renderHome() {
     }
   });
 
-  actions.appendChild(startBtn);
-  homeMain.appendChild(actions);
+  const homeActions = document.createElement("div");
+  homeActions.className = "button-row home-actions";
+  homeActions.appendChild(startBtn);
+  footer.appendChild(homeActions);
 
   if (devModeEnabled) {
     const devToolsCard = createCard();
@@ -4818,7 +5055,7 @@ function renderHome() {
     homeMain.appendChild(devToolsCard);
   }
 
-  screen.appendChild(homeMain);
+  content.appendChild(homeMain);
 
   const devModeRow = document.createElement("div");
   devModeRow.className = "dev-mode-row";
@@ -4843,7 +5080,7 @@ function renderHome() {
   devModeSlider.className = "slider";
   devModeSwitch.append(devModeInput, devModeSlider);
   devModeRow.append(devModeLabel, devModeSwitch);
-  screen.appendChild(devModeRow);
+  content.appendChild(devModeRow);
 
   urlInput.addEventListener("input", () => {
     if (appState.homeActiveEntry !== "url") {
@@ -4875,6 +5112,34 @@ function renderHome() {
   syncEntryVisibility();
   syncScreenshotCardState();
   syncStartButtonState();
+}
+
+function renderMenu() {
+  const { content, footer } = createTitledPage("Menu", "Settings and shortcuts live here", "menu-screen");
+
+  const card = createCard();
+
+  const intro = document.createElement("p");
+  intro.className = "stage-description menu-copy";
+  intro.textContent = "This area is reserved for future settings and menu actions. Voice behavior remains disabled here.";
+
+  const status = document.createElement("p");
+  status.className = "small menu-copy";
+  status.textContent = appState.recipe
+    ? "A recipe is still loaded. Use the bottom navigation to jump back into Ingredients or Cooking."
+    : "No recipe is currently loaded. Start from Home when you are ready.";
+
+  card.append(intro, status);
+  content.appendChild(card);
+
+  footer.appendChild(createActionButtonsRow([
+    {
+      label: "Back to Home",
+      className: "primary",
+      onClick: () => setScreen("home"),
+      actionName: "home"
+    }
+  ], "menu-actions"));
 }
 
 function renderAnalysis() {
@@ -4940,32 +5205,26 @@ function renderAnalysis() {
 
   content.appendChild(summaryCard);
 
-  const actions = document.createElement("div");
-  actions.className = "button-row analysis-actions";
-  // Temporary debug simplification: all guided-flow forward actions use "Next".
-  actions.append(
-    createButton("Next", "primary", () => {
-      maybeShowVoiceOnboarding(() => setScreen("ingredientsIntro"));
-    }),
-    createButton("Back to Home", "", () => setScreen("home"))
-  );
-
-  footer.appendChild(actions);
+  footer.appendChild(createActionButtonsRow([
+    {
+      label: "Back",
+      className: "ghost-action",
+      onClick: () => setScreen("home"),
+      actionName: "back"
+    },
+    {
+      label: "Next",
+      className: "primary",
+      onClick: () => {
+        maybeShowVoiceOnboarding(() => setScreen("ingredientsIntro"));
+      },
+      actionName: "next"
+    }
+  ], "analysis-actions"));
 }
 
 function renderStageIntro(title, description, backScreen, continueScreen, continueLabel, helperNote, stageLabelText = "") {
-  appEl.innerHTML = "";
-  const screen = document.createElement("div");
-  screen.className = "screen stage-screen";
-
-  const header = document.createElement("div");
-  header.className = "stage-screen__header";
-
-  const main = document.createElement("div");
-  main.className = "stage-screen__main";
-
-  const footer = document.createElement("div");
-  footer.className = "stage-screen__footer";
+  const { screen, header, main, footer } = createStageScreenShell();
 
   const titleEl = document.createElement("h1");
   titleEl.className = "stage-title";
@@ -4991,36 +5250,21 @@ function renderStageIntro(title, description, backScreen, continueScreen, contin
     main.appendChild(note);
   }
 
-  if (isVoiceDebugUiEnabled()) {
-    footer.appendChild(createVoiceDebugCopyButton());
-  }
-
-  const actions = document.createElement("div");
-  actions.className = "stage-actions";
-  actions.append(
-    createButton("Home", "secondary-action", () => setScreen("home"), "home"),
-    createButton("Back", "secondary-action", () => setScreen(backScreen), "back"),
-    createButton(continueLabel || "Continue", "primary primary-action", () => setScreen(continueScreen), "next")
-  );
-
-  footer.appendChild(actions);
-  screen.append(header, main, footer);
-  appEl.appendChild(screen);
+  footer.appendChild(createStageActionRow(
+    {
+      onClick: () => setScreen(backScreen)
+    },
+    {
+      label: continueLabel || "Continue",
+      onClick: () => setScreen(continueScreen)
+    }
+  ));
 }
 
 function renderIngredientsIntro() {
-  appEl.innerHTML = "";
-  const screen = document.createElement("div");
-  screen.className = "screen stage-screen";
-
-  const header = document.createElement("div");
-  header.className = "stage-screen__header";
-
-  const main = document.createElement("div");
-  main.className = "stage-screen__main";
-
-  const footer = document.createElement("div");
-  footer.className = "stage-screen__footer";
+  const { header, main, footer } = createStageScreenShell({
+    navSection: "ingredients"
+  });
 
   const title = document.createElement("h1");
   title.className = "stage-title";
@@ -5048,50 +5292,34 @@ function renderIngredientsIntro() {
     readyLabel: "Voice ready"
   }));
   appendVoiceError(main);
-  if (isVoiceDebugUiEnabled()) {
-    footer.appendChild(createVoiceDebugCopyButton());
-  }
-
-  const actions = document.createElement("div");
-  actions.className = "stage-actions";
-  actions.append(
-    createButton("Home", "secondary-action", () => setScreen("home"), "home"),
-    createButton("Back", "secondary-action", () => setScreen("analysis"), "back"),
-    createButton("Next", "primary primary-action", () => {
-      requestIntroAdvance(
-        "ingredientsIntro",
-        "click",
-        getVoiceTimestamp(),
-        () => {
-          recordVoiceDebugEvent("intro-advance-triggered-by-click", {
-            introScreen: "ingredientsIntro",
-            triggerAction: "primary-button"
-          });
-          setScreen("ingredients");
-        },
-        "primary-button"
-      );
-    }, "next")
-  );
-
-  footer.appendChild(actions);
-  screen.append(header, main, footer);
-  appEl.appendChild(screen);
+  footer.appendChild(createStageActionRow(
+    {
+      onClick: () => setScreen("analysis")
+    },
+    {
+      onClick: () => {
+        requestIntroAdvance(
+          "ingredientsIntro",
+          "click",
+          getVoiceTimestamp(),
+          () => {
+            recordVoiceDebugEvent("intro-advance-triggered-by-click", {
+              introScreen: "ingredientsIntro",
+              triggerAction: "primary-button"
+            });
+            setScreen("ingredients");
+          },
+          "primary-button"
+        );
+      }
+    }
+  ));
 }
 
 function renderPreparationIntro() {
-  appEl.innerHTML = "";
-  const screen = document.createElement("div");
-  screen.className = "screen stage-screen";
-
-  const header = document.createElement("div");
-  header.className = "stage-screen__header";
-
-  const main = document.createElement("div");
-  main.className = "stage-screen__main";
-
-  const footer = document.createElement("div");
-  footer.className = "stage-screen__footer";
+  const { header, main, footer } = createStageScreenShell({
+    navSection: "ingredients"
+  });
 
   const title = document.createElement("h1");
   title.className = "stage-title";
@@ -5110,50 +5338,34 @@ function renderPreparationIntro() {
   header.append(title, stageLabel);
   main.append(recipeIcon, description);
   main.appendChild(createVoiceActivationCard("Voice commands are disabled on this intro. Tap Next to continue."));
-  if (isVoiceDebugUiEnabled()) {
-    footer.appendChild(createVoiceDebugCopyButton());
-  }
-
-  const actions = document.createElement("div");
-  actions.className = "stage-actions";
-  actions.append(
-    createButton("Home", "secondary-action", () => setScreen("home"), "home"),
-    createButton("Back", "secondary-action", () => setScreen("ingredients"), "back"),
-    createButton("Next", "primary primary-action", () => {
-      requestIntroAdvance(
-        "preparationIntro",
-        "click",
-        getVoiceTimestamp(),
-        () => {
-          recordVoiceDebugEvent("intro-advance-triggered-by-click", {
-            introScreen: "preparationIntro",
-            triggerAction: "primary-button"
-          });
-          startPreparationFlow();
-        },
-        "primary-button"
-      );
-    }, "next")
-  );
-
-  footer.appendChild(actions);
-  screen.append(header, main, footer);
-  appEl.appendChild(screen);
+  footer.appendChild(createStageActionRow(
+    {
+      onClick: () => setScreen("ingredients")
+    },
+    {
+      onClick: () => {
+        requestIntroAdvance(
+          "preparationIntro",
+          "click",
+          getVoiceTimestamp(),
+          () => {
+            recordVoiceDebugEvent("intro-advance-triggered-by-click", {
+              introScreen: "preparationIntro",
+              triggerAction: "primary-button"
+            });
+            startPreparationFlow();
+          },
+          "primary-button"
+        );
+      }
+    }
+  ));
 }
 
 function renderCookingIntro() {
-  appEl.innerHTML = "";
-  const screen = document.createElement("div");
-  screen.className = "screen stage-screen";
-
-  const header = document.createElement("div");
-  header.className = "stage-screen__header";
-
-  const main = document.createElement("div");
-  main.className = "stage-screen__main";
-
-  const footer = document.createElement("div");
-  footer.className = "stage-screen__footer";
+  const { header, main, footer } = createStageScreenShell({
+    navSection: "cooking"
+  });
 
   const title = document.createElement("h1");
   title.className = "stage-title";
@@ -5172,38 +5384,31 @@ function renderCookingIntro() {
       ? "Voice commands are disabled on this intro. Tap Next to continue."
       : "Voice enabled. You can say: Next, Repeat, Pause."
   ));
-  if (isVoiceDebugUiEnabled()) {
-    footer.appendChild(createVoiceDebugCopyButton());
-  }
-
-  const actions = document.createElement("div");
-  actions.className = "stage-actions";
-  actions.append(
-    createButton("Home", "secondary-action", () => setScreen("home"), "home"),
-    createButton("Back", "secondary-action", () => openPreparationIntro(), "back"),
-    createButton("Next", "primary primary-action", () => {
-      requestIntroAdvance(
-        "cookingIntro",
-        "click",
-        getVoiceTimestamp(),
-        () => {
-          recordVoiceDebugEvent("intro-advance-triggered-by-click", {
-            introScreen: "cookingIntro",
-            triggerAction: "primary-button"
-          });
-          enterCookingFlow({
-            source: "button-next",
-            triggerDetail: "cookingIntro-primary-button"
-          });
-        },
-        "primary-button"
-      );
-    }, "next")
-  );
-
-  footer.appendChild(actions);
-  screen.append(header, main, footer);
-  appEl.appendChild(screen);
+  footer.appendChild(createStageActionRow(
+    {
+      onClick: () => openPreparationIntro()
+    },
+    {
+      onClick: () => {
+        requestIntroAdvance(
+          "cookingIntro",
+          "click",
+          getVoiceTimestamp(),
+          () => {
+            recordVoiceDebugEvent("intro-advance-triggered-by-click", {
+              introScreen: "cookingIntro",
+              triggerAction: "primary-button"
+            });
+            enterCookingFlow({
+              source: "button-next",
+              triggerDetail: "cookingIntro-primary-button"
+            });
+          },
+          "primary-button"
+        );
+      }
+    }
+  ));
 }
 
 function renderIngredients(options = {}) {
@@ -5268,13 +5473,14 @@ function renderIngredients(options = {}) {
   card.append(list, markAllBtn);
   content.appendChild(card);
 
-  const actions = document.createElement("div");
-  actions.className = "button-row two";
-  actions.append(
-    createButton("Back", "", () => setScreen("ingredientsIntro")),
-    createButton("Next", "primary", () => setScreen("preparationIntro"))
-  );
-  footer.appendChild(actions);
+  footer.appendChild(createStageActionRow(
+    {
+      onClick: () => setScreen("ingredientsIntro")
+    },
+    {
+      onClick: () => setScreen("preparationIntro")
+    }
+  ));
 
   if (Number.isFinite(restoreScrollTop)) {
     window.requestAnimationFrame(() => {
@@ -5321,29 +5527,35 @@ function renderPreparation() {
     speak(currentText);
   }
 
-  const primaryRow = document.createElement("div");
-  primaryRow.className = "action-row cooking-actions primary-actions";
-  primaryRow.append(
-    createButton("Repeat", "primary btn-next", () => speak(currentText), "repeat"),
-    createButton("Next", "primary btn-next", () => {
-      advancePreparationStep();
-    }, "next")
-  );
-
-  const secondaryRow = document.createElement("div");
-  secondaryRow.className = "action-row secondary-actions";
-  secondaryRow.append(
-    createButton("Back", "ghost-action", () => {
-      if (appState.preparationIndex > 0) {
-        appState.preparationIndex -= 1;
-        renderPreparation();
-      } else {
-        openPreparationIntro();
-      }
-    }, "back")
-  );
-
-  footer.append(primaryRow, secondaryRow);
+  footer.appendChild(createActionButtonsRow([
+    {
+      label: "Back",
+      className: "ghost-action",
+      onClick: () => {
+        if (appState.preparationIndex > 0) {
+          appState.preparationIndex -= 1;
+          renderPreparation();
+        } else {
+          openPreparationIntro();
+        }
+      },
+      actionName: "back"
+    },
+    {
+      label: "Repeat",
+      className: "ghost-action",
+      onClick: () => speak(currentText),
+      actionName: "repeat"
+    },
+    {
+      label: "Next",
+      className: "primary",
+      onClick: () => {
+        advancePreparationStep();
+      },
+      actionName: "next"
+    }
+  ], "preparation-actions"));
 }
 
 function startStepTimerIfNeeded(step) {
@@ -5587,55 +5799,42 @@ function renderCooking() {
 
   const timerInteractionActive = hasTimer && (appState.timerStatus === "running" || appState.timerStatus === "paused");
 
-  const primaryRow = document.createElement("div");
-  primaryRow.className = "action-row cooking-actions primary-actions";
-
-  if (timerInteractionActive) {
-    primaryRow.append(
-      createButton(appState.timerPaused ? "Resume Timer" : "Pause Timer", "primary btn-next", () => {
-        toggleGuidancePause();
-        renderCooking();
-      }, "pause"),
-      createButton("Skip Timer", "", () => {
-        skipTimerAndAdvance();
-      }, "skip-timer")
-    );
-  } else {
-    primaryRow.append(
-      createButton("Repeat", "primary btn-next", () => repeatCurrentCookingStep(), "repeat"),
-      createButton("Next", "primary btn-next", () => {
-        recordCookingVoiceDebugEvent("cooking-click-next-triggered-after-timer", {
-          cookingIndex: appState.cookingIndex,
-          timerStatus: appState.timerStatus,
-          voiceListening: appState.voiceListening,
-          voiceOutputSpeaking: appState.voiceOutputSpeaking,
-          screenMode: getVoiceScreenMode()
-        });
-        console.warn("[cooking-debug] cooking-click-next-triggered-after-timer", {
-          screen: appState.currentScreen,
-          cookingIndex: appState.cookingIndex,
-          timerStatus: appState.timerStatus,
-          voiceListening: appState.voiceListening,
-          voiceOutputSpeaking: appState.voiceOutputSpeaking,
-          liveTranscript: appState.voiceLastTranscript || appState.voiceHeard || "",
-          liveCommand: appState.voiceLastMatchedCommand || "",
-          screenMode: getVoiceScreenMode()
-        });
-        goToNextCookingStep();
-      }, "next")
-    );
-  }
-
-  const secondaryRow = document.createElement("div");
-  secondaryRow.className = "action-row secondary-actions";
-  const backBtn = createButton("Back", "ghost-action", () => goToPreviousCookingStep(), "back");
-  backBtn.disabled = idx === 0;
-  secondaryRow.append(
-    backBtn,
-    createButton("Quit", "ghost-action", () => stopCookingFlow(true), "stop")
-  );
-
-  footer.append(primaryRow, secondaryRow);
+  footer.appendChild(createCookingActionArea({
+    timerInteractionActive,
+    timerPaused: appState.timerPaused,
+    canGoBack: idx > 0,
+    onQuit: () => stopCookingFlow(true),
+    onPauseTimer: () => {
+      toggleGuidancePause();
+      renderCooking();
+    },
+    onBack: () => goToPreviousCookingStep(),
+    onNext: () => {
+      recordCookingVoiceDebugEvent("cooking-click-next-triggered-after-timer", {
+        cookingIndex: appState.cookingIndex,
+        timerStatus: appState.timerStatus,
+        voiceListening: appState.voiceListening,
+        voiceOutputSpeaking: appState.voiceOutputSpeaking,
+        screenMode: getVoiceScreenMode()
+      });
+      console.warn("[cooking-debug] cooking-click-next-triggered-after-timer", {
+        screen: appState.currentScreen,
+        cookingIndex: appState.cookingIndex,
+        timerStatus: appState.timerStatus,
+        voiceListening: appState.voiceListening,
+        voiceOutputSpeaking: appState.voiceOutputSpeaking,
+        liveTranscript: appState.voiceLastTranscript || appState.voiceHeard || "",
+        liveCommand: appState.voiceLastMatchedCommand || "",
+        screenMode: getVoiceScreenMode()
+      });
+      goToNextCookingStep();
+    },
+    onSkipTimer: () => {
+      skipTimerAndAdvance();
+    },
+    onRepeat: () => repeatCurrentCookingStep(),
+    repeatEnabled: true
+  }));
 }
 
 function renderTimerActive() {
@@ -5731,53 +5930,36 @@ function renderTimerActive() {
 
   const timerInteractionActive = appState.timerStatus === "running" || appState.timerStatus === "paused";
 
-  const primaryRow = document.createElement("div");
-  primaryRow.className = "action-row cooking-actions primary-actions";
-
-  if (timerInteractionActive) {
-    primaryRow.append(
-      createButton(appState.timerPaused ? "Resume Timer" : "Pause Timer", "primary btn-next", () => {
-        toggleGuidancePause();
-        renderTimerActive();
-      }, "pause"),
-      createButton("Skip Timer", "", () => {
-        skipTimerAndAdvance();
-      }, "skip-timer")
-    );
-  } else {
-    primaryRow.append(
-      createButton("Repeat", "primary btn-next", () => repeatCurrentCookingStep(), "repeat"),
-      createButton("Next", "primary btn-next", () => goToNextCookingStep(), "next")
-    );
-  }
-
-  const secondaryRow = document.createElement("div");
-  secondaryRow.className = "action-row secondary-actions";
-  const backBtn = createButton("Back", "ghost-action", () => goToPreviousCookingStep(), "back");
-  backBtn.disabled = idx === 0;
-  secondaryRow.append(
-    backBtn,
-    createButton("Quit", "ghost-action", () => stopCookingFlow(true), "stop")
-  );
-
-  footer.append(primaryRow, secondaryRow);
+  footer.appendChild(createCookingActionArea({
+    timerInteractionActive,
+    timerPaused: appState.timerPaused,
+    canGoBack: idx > 0,
+    onQuit: () => stopCookingFlow(true),
+    onPauseTimer: () => {
+      toggleGuidancePause();
+      renderTimerActive();
+    },
+    onBack: () => goToPreviousCookingStep(),
+    onNext: () => goToNextCookingStep(),
+    onSkipTimer: () => {
+      skipTimerAndAdvance();
+    },
+    onRepeat: () => repeatCurrentCookingStep(),
+    repeatEnabled: !timerInteractionActive
+  }));
 }
 
 function renderCompleted() {
-  appEl.innerHTML = "";
-  const screen = document.createElement("div");
-  screen.className = "screen stage-screen completed-screen";
-
-  const header = document.createElement("div");
-  header.className = "stage-screen__header";
+  const { header, main, footer } = createStageScreenShell({
+    screenClassName: "completed-screen",
+    navSection: "cooking"
+  });
 
   const title = document.createElement("h1");
   title.className = "stage-title";
   title.textContent = "Recipe Completed";
   header.appendChild(title);
-
-  const main = document.createElement("div");
-  main.className = "stage-screen__main completed-screen__main";
+  main.classList.add("completed-screen__main");
 
   const recipeIcon = createRecipeIcon(COOKING_STAGE_ICON, "");
 
@@ -5790,9 +5972,6 @@ function renderCompleted() {
   subtext.textContent = "Nice work in the kitchen.";
 
   main.append(recipeIcon, message, subtext);
-
-  const footer = document.createElement("div");
-  footer.className = "completed-screen__footer action-bar";
 
   const actions = document.createElement("div");
   actions.className = "completed-actions";
@@ -5813,8 +5992,6 @@ function renderCompleted() {
     })
   );
   footer.appendChild(actions);
-  screen.append(header, main, footer);
-  appEl.appendChild(screen);
 }
 
 window.addEventListener("keydown", (event) => {
