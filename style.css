@@ -221,6 +221,12 @@ body {
   box-shadow: 0 -6px 16px rgba(0, 0, 0, 0.06);
 }
 
+.stage-screen > .page-footer {
+  width: calc(100% + (var(--page-gutter) * 2));
+  margin-left: calc(var(--page-gutter) * -1);
+  margin-right: calc(var(--page-gutter) * -1);
+}
+
 .page-header {
   flex-shrink: 0;
   display: flex;
