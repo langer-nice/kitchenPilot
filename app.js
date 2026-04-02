@@ -62,6 +62,91 @@ const appState = {
 };
 
 const appEl = document.getElementById("app");
+
+function ensureTimerOverlay() {
+  let overlay = document.getElementById("timer-overlay");
+  if (overlay) {
+    return overlay;
+  }
+
+  overlay = document.createElement("div");
+  overlay.id = "timer-overlay";
+  overlay.className = "timer-overlay hidden";
+
+  const panel = document.createElement("div");
+  panel.className = "timer-panel";
+
+  const display = document.createElement("div");
+  display.className = "timer-display";
+  display.innerHTML = '⏱ <span id="timer-value">00:00</span>';
+
+  const actions = document.createElement("div");
+  actions.className = "timer-actions";
+
+  const pauseBtn = document.createElement("button");
+  pauseBtn.id = "timer-pause-btn";
+  pauseBtn.className = "btn btn-secondary";
+  pauseBtn.type = "button";
+  pauseBtn.textContent = "Pause";
+  pauseBtn.addEventListener("click", () => {
+    toggleGuidancePause();
+    if (appState.currentScreen === "cooking") {
+      renderCooking();
+      return;
+    }
+    if (appState.currentScreen === "timerActive") {
+      renderTimerActive();
+      return;
+    }
+    updateTimerOverlay();
+  });
+
+  const skipBtn = document.createElement("button");
+  skipBtn.id = "timer-skip-btn";
+  skipBtn.className = "btn btn-primary primary";
+  skipBtn.type = "button";
+  skipBtn.textContent = "Skip";
+  skipBtn.addEventListener("click", () => {
+    skipTimerAndAdvance();
+    updateTimerOverlay();
+  });
+
+  actions.append(pauseBtn, skipBtn);
+  panel.append(display, actions);
+  overlay.appendChild(panel);
+  document.body.appendChild(overlay);
+
+  return overlay;
+}
+
+function updateTimerOverlay() {
+  const overlay = ensureTimerOverlay();
+  const timerValue = document.getElementById("timer-value");
+  const pauseBtn = document.getElementById("timer-pause-btn");
+  const timerIsActive = Boolean(
+    Number.isFinite(appState.activeTimerSeconds) &&
+    appState.activeTimerSeconds >= 0 &&
+    (appState.timerStatus === "running" || appState.timerStatus === "paused")
+  );
+
+  if (!timerIsActive) {
+    overlay.classList.add("hidden");
+    overlay.setAttribute("aria-hidden", "true");
+    return;
+  }
+
+  overlay.classList.remove("hidden");
+  overlay.setAttribute("aria-hidden", "false");
+
+  if (timerValue) {
+    timerValue.textContent = formatTime(appState.activeTimerSeconds);
+  }
+
+  if (pauseBtn) {
+    pauseBtn.textContent = appState.timerPaused ? "Resume" : "Pause";
+  }
+}
+
 const VOICE_SYSTEM_ENABLED = false;
 const MINIMAL_VOICE_PHASE1_ENABLED = true;
 const SpeechRecognition = VOICE_SYSTEM_ENABLED
@@ -143,7 +228,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v98"; 
+const BUILD_VERSION = "DEV BUILD: v99"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -320,6 +405,7 @@ function setTimerStatus(nextStatus, reason) {
     console.log(`[timer-state] ${appState.timerStatus} -> ${nextStatus}${reason ? ` (${reason})` : ""}`);
     appState.timerStatus = nextStatus;
   }
+  updateTimerOverlay();
 }
 
 function clearTimerMessageLater() {
@@ -2035,6 +2121,8 @@ function setScreen(screenName) {
     clearVoiceRecognitionActivity();
     clearMinimalVoiceTranscriptState();
   }
+
+  updateTimerOverlay();
 }
 
 function splitPreparationActions(preparationSteps) {
@@ -2896,6 +2984,7 @@ function skipActiveTimer() {
   if (display) {
     display.textContent = "00:00";
   }
+  updateTimerOverlay();
 
   clearTimerMessageLater();
   appState.timerMessageTimeoutId = window.setTimeout(() => {
@@ -2942,6 +3031,7 @@ function toggleGuidancePause() {
   if (notice) {
     notice.textContent = appState.timerMessage;
   }
+  updateTimerOverlay();
 }
 
 function stopCookingFlow(requireConfirmation = false) {
@@ -5609,6 +5699,7 @@ function startStepTimerIfNeeded(step) {
       if (timerDisplay) {
         timerDisplay.textContent = formatTime(secondsLeft);
       }
+      updateTimerOverlay();
     },
     () => {
       appState.activeTimerSeconds = 0;
@@ -5657,6 +5748,7 @@ function startStepTimerIfNeeded(step) {
       if (appState.currentScreen === "timerActive") {
         renderTimerActive();
       }
+      updateTimerOverlay();
     }
   );
 }
@@ -5678,6 +5770,8 @@ function ensureCurrentStepTimerStarted() {
   if (!timerState.isRunning && appState.activeTimerSeconds === null) {
     startStepTimerIfNeeded(step);
   }
+
+  updateTimerOverlay();
 }
 
 function renderCooking() {
@@ -6104,4 +6198,6 @@ window.addEventListener("kitchenpilot:voice-speech-end", () => {
   }
 });
 
+ensureTimerOverlay();
+updateTimerOverlay();
 setScreen("onboarding");
