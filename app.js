@@ -63,13 +63,8 @@ const appState = {
 
 const appEl = document.getElementById("app");
 
-function ensureTimerOverlay() {
-  let overlay = document.getElementById("timer-overlay");
-  if (overlay) {
-    return overlay;
-  }
-
-  overlay = document.createElement("div");
+function createTimerOverlayElement() {
+  const overlay = document.createElement("div");
   overlay.id = "timer-overlay";
   overlay.className = "timer-overlay hidden";
 
@@ -114,13 +109,15 @@ function ensureTimerOverlay() {
   actions.append(pauseBtn, skipBtn);
   panel.append(display, actions);
   overlay.appendChild(panel);
-  document.body.appendChild(overlay);
 
   return overlay;
 }
 
 function updateTimerOverlay() {
-  const overlay = ensureTimerOverlay();
+  const overlay = document.getElementById("timer-overlay");
+  if (!overlay) {
+    return;
+  }
   const timerValue = document.getElementById("timer-value");
   const pauseBtn = document.getElementById("timer-pause-btn");
   const timerIsActive = isTimerOverlayActive();
@@ -232,7 +229,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v101"; 
+const BUILD_VERSION = "DEV BUILD: v102"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -4259,8 +4256,11 @@ function createPageShell(screenClassName = "") {
   const footer = document.createElement("div");
   footer.className = "action-bar";
 
+  const timerOverlay = createTimerOverlayElement();
+
   pageFooter.append(
     footer,
+    timerOverlay,
     createBottomNavigation(getBottomNavSection())
   );
 
@@ -4271,6 +4271,7 @@ function createPageShell(screenClassName = "") {
     header.appendChild(createVoiceDebugCopyButton());
   }
 
+  updateTimerOverlay();
   return { page, header, content, footer, pageFooter };
 }
 
@@ -4311,8 +4312,11 @@ function createStageScreenShell(options = {}) {
   const footer = document.createElement("div");
   footer.className = "action-bar action-bar--stage";
 
+  const timerOverlay = createTimerOverlayElement();
+
   pageFooter.append(
     footer,
+    timerOverlay,
     createBottomNavigation(navSection)
   );
 
@@ -4323,6 +4327,7 @@ function createStageScreenShell(options = {}) {
     header.appendChild(createVoiceDebugCopyButton());
   }
 
+  updateTimerOverlay();
   return { screen, header, main, footer, pageFooter };
 }
 
@@ -5858,40 +5863,6 @@ function renderCooking() {
     ensureCurrentStepTimerStarted();
   }
 
-  if (hasTimer) {
-    const timerCard = document.createElement("section");
-    timerCard.className = "timer-panel";
-    if (appState.timerStatus === "paused") {
-      timerCard.classList.add("timer-paused");
-    } else {
-      timerCard.classList.add("timer-running");
-    }
-
-    const timerIcon = document.createElement("i");
-    timerIcon.className = "fa-solid fa-stopwatch timer-icon";
-    timerIcon.setAttribute("aria-hidden", "true");
-
-    const timerDisplay = document.createElement("span");
-    timerDisplay.className = "timer-display";
-    timerDisplay.id = "timerDisplay";
-    timerDisplay.textContent = formatTime(appState.activeTimerSeconds ?? step.timerSeconds);
-
-    const timerText = document.createElement("div");
-    timerText.className = "timer-text";
-    timerText.appendChild(timerDisplay);
-
-    if (appState.timerStatus === "paused") {
-      const pausedLabel = document.createElement("p");
-      pausedLabel.className = "timer-substatus";
-      pausedLabel.textContent = "En pause";
-      timerText.appendChild(pausedLabel);
-    }
-
-    timerCard.append(timerIcon, timerText);
-
-    content.appendChild(timerCard);
-  }
-
   content.appendChild(createScrollableStepPanel(
     appState.recipe.cookingSteps,
     idx,
@@ -5993,37 +5964,6 @@ function renderTimerActive() {
 
   top.append(recipeName, stepMeta);
   header.appendChild(top);
-
-  const timerCard = document.createElement("section");
-  timerCard.className = "timer-panel";
-  if (appState.timerStatus === "paused") {
-    timerCard.classList.add("timer-paused");
-  } else {
-    timerCard.classList.add("timer-running");
-  }
-
-  const timerIcon = document.createElement("i");
-  timerIcon.className = "fa-solid fa-stopwatch timer-icon";
-  timerIcon.setAttribute("aria-hidden", "true");
-
-  const timerDisplay = document.createElement("span");
-  timerDisplay.className = "timer-display";
-  timerDisplay.id = "timerDisplay";
-  timerDisplay.textContent = formatTime(appState.activeTimerSeconds ?? step.timerSeconds);
-
-  const timerText = document.createElement("div");
-  timerText.className = "timer-text";
-  timerText.appendChild(timerDisplay);
-
-  if (appState.timerStatus === "paused") {
-    const pausedLabel = document.createElement("p");
-    pausedLabel.className = "timer-substatus";
-    pausedLabel.textContent = "En pause";
-    timerText.appendChild(pausedLabel);
-  }
-
-  timerCard.append(timerIcon, timerText);
-  content.appendChild(timerCard);
 
   content.appendChild(createScrollableStepPanel(
     appState.recipe.cookingSteps,

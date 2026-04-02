@@ -1740,15 +1740,8 @@ button.ghost-action:hover,
 }
 
 .timer-overlay {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 72px;
-  z-index: 30;
-  display: flex;
-  justify-content: center;
-  padding: 0 16px;
-  pointer-events: none;
+  width: 100%;
+  padding: 0 var(--page-gutter) 12px;
 }
 
 .timer-overlay.hidden {
@@ -1756,32 +1749,40 @@ button.ghost-action:hover,
 }
 
 .timer-overlay .timer-panel {
-  width: calc(100% - 32px);
+  width: 100%;
   max-width: 420px;
+  margin: 0 auto;
   background: rgba(0, 0, 0, 0.85);
   color: #ffffff;
   border-radius: 16px;
-  padding: 16px;
-  pointer-events: auto;
-  transition: transform 0.2s ease, opacity 0.2s ease;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .timer-overlay .timer-display {
-  font-size: 24px;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.1rem;
   font-weight: 600;
-  text-align: center;
-  margin-bottom: 12px;
   color: #ffffff;
+  text-align: left;
 }
 
 .timer-actions {
   display: flex;
-  gap: 12px;
+  gap: 10px;
+  flex: 0 0 auto;
 }
 
 .timer-actions .btn {
-  flex: 1;
-  height: 48px;
+  flex: 0 0 auto;
+  min-width: 88px;
+  height: 44px;
   border-radius: 12px;
 }
 
