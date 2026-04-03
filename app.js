@@ -244,7 +244,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v110"; 
+const BUILD_VERSION = "DEV BUILD: v111"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -5663,16 +5663,16 @@ function renderIngredientsIntro() {
     voicePanel.appendChild(stopLabel);
   }
 
-  const actionRow = createStageActionRow(
+  main.appendChild(voicePanel);
+
+  footer.appendChild(createStageActionRow(
     {
       onClick: () => setScreen("analysis")
     },
     {
       onClick: () => runProgressionNextAction("ingredientsIntro", "click")
     }
-  );
-
-  footer.append(voicePanel, actionRow);
+  ));
 }
 
 function renderPreparationIntro() {
@@ -5726,16 +5726,16 @@ function renderPreparationIntro() {
     voicePanel.appendChild(stopLabel);
   }
 
-  const actionRow = createStageActionRow(
+  main.appendChild(voicePanel);
+
+  footer.appendChild(createStageActionRow(
     {
       onClick: () => setScreen("ingredients")
     },
     {
       onClick: () => runProgressionNextAction("preparationIntro", "click")
     }
-  );
-
-  footer.append(voicePanel, actionRow);
+  ));
 }
 
 function renderCookingIntro() {
@@ -5785,16 +5785,16 @@ function renderCookingIntro() {
     voicePanel.appendChild(stopLabel);
   }
 
-  const actionRow = createStageActionRow(
+  main.appendChild(voicePanel);
+
+  footer.appendChild(createStageActionRow(
     {
       onClick: () => openPreparationIntro()
     },
     {
       onClick: () => runProgressionNextAction("cookingIntro", "click")
     }
-  );
-
-  footer.append(voicePanel, actionRow);
+  ));
 }
 
 function renderIngredients(options = {}) {

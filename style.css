@@ -1794,8 +1794,8 @@ button[data-action]:not(.primary).voice-active {
 }
 
 .action-bar--stage {
-  padding-left: 0;
-  padding-right: 0;
+  padding-left: var(--page-gutter);
+  padding-right: var(--page-gutter);
 }
 
 .action-row {
