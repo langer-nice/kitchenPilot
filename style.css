@@ -997,56 +997,39 @@ button.danger,
 
 .voice-indicator-bar {
   width: 100%;
-  min-height: 48px;
-  border: 0;
-  border-radius: 14px;
-  background: transparent;
+  min-height: 46px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 8px 16px;
+  gap: 12px;
+  padding: 10px 14px;
   margin: 0;
-  appearance: none;
-  -webkit-appearance: none;
-  color: inherit;
-  box-shadow: none;
-  transition: background 0.24s ease, box-shadow 0.24s ease, transform 0.2s ease, opacity 0.2s ease;
+  border-radius: 12px;
+  border: 1px solid transparent;
 }
 
-.voice-indicator-bar:hover {
-  background: rgba(226, 231, 240, 0.18);
+.voice-indicator-bar--ready {
+  background: #dff2e9;
+  border-color: #b7dfcb;
+  color: #183b2c;
 }
 
-.voice-indicator-bar:active {
-  transform: scale(0.995);
+.voice-indicator-bar--error {
+  background: #f7d9dc;
+  border-color: #ebb5bb;
+  color: #b32632;
 }
 
-.voice-indicator-bar:focus-visible {
-  outline: 2px solid rgba(47, 107, 255, 0.22);
-  outline-offset: 2px;
+.voice-indicator-bar--listening .voice-bar {
+  animation: voice-bars-active 0.5s ease-in-out infinite;
 }
 
-.voice-indicator-bar.voice-off {
-  background: #f2f5fa;
-  border: 1px solid #c9d3e1;
-  opacity: 1;
-  gap: 10px;
-}
-
-.voice-indicator-bar.voice-idle {
-  background: rgba(236, 241, 249, 0.18);
-  opacity: 0.78;
-}
-
-.voice-indicator-bar.voice-active {
-  background:
-    linear-gradient(90deg,
-      rgba(232, 248, 255, 0) 0%,
-      rgba(232, 248, 255, 0.72) 16%,
-      rgba(232, 245, 248, 0.92) 50%,
-      rgba(236, 241, 255, 0.72) 84%,
-      rgba(236, 241, 255, 0) 100%);
-  box-shadow: 0 8px 18px rgba(99, 160, 176, 0.08);
+.voice-indicator-stop {
+  width: auto;
+  min-height: 32px;
+  margin-left: auto;
+  padding: 7px 12px;
+  font-size: 0.82rem;
+  flex: 0 0 auto;
 }
 
 .voice-bars {
@@ -1084,33 +1067,29 @@ button.danger,
   height: 12px;
 }
 
-.voice-indicator-bar.voice-off .voice-bar {
-  background: rgba(130, 140, 158, 0.32);
+.voice-indicator-bar--ready .voice-bar {
+  background: #1f7a52;
+  opacity: 0.9;
 }
 
-.voice-indicator-bar.voice-idle .voice-bar {
-  background: rgba(95, 120, 170, 0.46);
+.voice-indicator-bar--error .voice-bar {
+  background: #ef4444;
+  opacity: 0.9;
 }
 
-.voice-indicator-bar.voice-active .voice-bar {
-  background: var(--color-secondary);
-  opacity: 0.92;
-  animation: voice-bars-active 0.5s ease-in-out infinite;
-}
-
-.voice-indicator-bar.voice-active .voice-bar:nth-child(2) {
+.voice-indicator-bar--listening .voice-bar:nth-child(2) {
   animation-delay: 0.08s;
 }
 
-.voice-indicator-bar.voice-active .voice-bar:nth-child(3) {
+.voice-indicator-bar--listening .voice-bar:nth-child(3) {
   animation-delay: 0.16s;
 }
 
-.voice-indicator-bar.voice-active .voice-bar:nth-child(4) {
+.voice-indicator-bar--listening .voice-bar:nth-child(4) {
   animation-delay: 0.24s;
 }
 
-.voice-indicator-bar.voice-active .voice-bar:nth-child(5) {
+.voice-indicator-bar--listening .voice-bar:nth-child(5) {
   animation-delay: 0.32s;
 }
 
@@ -1150,12 +1129,6 @@ button.danger,
   color: var(--muted);
   font-size: 0.98rem;
   transition: color 0.2s ease;
-}
-
-.voice-panel.voice-off .voice-icon,
-.voice-indicator-bar.voice-off .voice-icon,
-.voice-indicator-bar.voice-off .voice-indicator-text {
-  color: var(--color-text-primary);
 }
 
 .voice-indicator-text {
@@ -1366,81 +1339,101 @@ button.danger,
   width: 100%;
   max-width: 420px;
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px 16px;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
   border-radius: 12px;
-  border: 1px solid var(--color-border);
-  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid #d7dde8;
+  background: rgba(255, 255, 255, 0.88);
   text-align: left;
-}
-
-.voice-activation-panel--ready,
-.voice-activation-panel--requesting,
-.voice-activation-panel--unavailable {
-  gap: 8px;
+  cursor: pointer;
 }
 
 .voice-activation-title {
   margin: 0;
   font-size: 0.95rem;
+  font-weight: 600;
 }
 
 .voice-activation-copy {
   margin: 0;
   color: var(--muted);
-  font-size: 0.9rem;
-  line-height: 1.4;
-}
-
-.voice-activation-copy--compact {
   font-size: 0.84rem;
+  line-height: 1.35;
 }
 
-.voice-activation-status {
-  margin: 0;
-  font-size: 0.74rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--color-text-secondary);
+button.voice-activation-panel {
+  color: inherit;
+  box-shadow: none;
 }
 
-.voice-activation-status[data-state="ready"] {
-  color: #145f32;
+.voice-activation-panel:hover {
+  background: #f8fafc;
 }
 
-.voice-activation-status[data-state="requesting"] {
-  color: #0e3e89;
+.voice-activation-panel:focus-visible {
+  outline: 2px solid rgba(47, 107, 255, 0.22);
+  outline-offset: 2px;
 }
 
-.voice-activation-status[data-state="unavailable"] {
-  color: var(--color-danger);
+.voice-activation-panel:disabled {
+  opacity: 1;
+  cursor: default;
 }
 
-.voice-activation-actions {
-  display: flex;
-  gap: 12px;
+.voice-activation-panel--requesting {
+  border-color: #bfd3f7;
+  background: #eef4ff;
 }
 
-.voice-activation-actions button {
-  flex: 1 1 0;
-  min-height: 44px;
+.voice-activation-panel--unavailable {
+  border-color: #ebb5bb;
+  background: #fdf1f2;
 }
 
-.voice-ready-row {
+.voice-activation-signal {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 4px;
+  min-width: 28px;
 }
 
-.voice-activation-turn-off {
-  width: auto;
-  min-height: 36px;
-  padding: 8px 12px;
-  font-size: 0.84rem;
-  flex: 0 0 auto;
+.voice-activation-bar {
+  width: 3px;
+  height: 12px;
+  border-radius: 999px;
+  background: #1f1f1f;
+  opacity: 0.9;
+}
+
+.voice-activation-bar:nth-child(2) {
+  height: 15px;
+}
+
+.voice-activation-bar:nth-child(3) {
+  height: 18px;
+}
+
+.voice-activation-bar:nth-child(4) {
+  height: 15px;
+}
+
+.voice-activation-bar:nth-child(5) {
+  height: 12px;
+}
+
+.voice-activation-panel--requesting .voice-activation-bar {
+  background: #2563eb;
+}
+
+.voice-activation-panel--unavailable .voice-activation-bar {
+  background: #ef4444;
+}
+
+.voice-activation-copy-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .voice-modal-overlay {

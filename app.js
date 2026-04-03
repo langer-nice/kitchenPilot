@@ -2724,106 +2724,54 @@ function getVoiceActivationMessage(enableMessage) {
 }
 
 function createVoiceActivationCard(enableMessage) {
-  const voiceCard = createCard();
-  voiceCard.classList.add("voice-activation-panel");
-
-  const status = document.createElement("p");
-  status.className = "voice-activation-status";
-
   if (appState.voiceStatus === "ready") {
-    voiceCard.classList.add("voice-activation-panel--ready");
-
-    const readyRow = document.createElement("div");
-    readyRow.className = "voice-ready-row";
-
-    status.textContent = "Voice ready";
-    status.dataset.state = "ready";
-
-    const description = document.createElement("p");
-    description.className = "voice-activation-copy voice-activation-copy--compact";
-    description.textContent = "You can say \"next\" on active preparation and cooking steps.";
-
-    const turnOffButton = createButton("Turn off", "secondary voice-activation-turn-off", () => {
-      disableMinimalVoicePreference();
-    });
-
-    readyRow.append(status, turnOffButton);
-    voiceCard.append(readyRow, description);
-    appendVoiceError(voiceCard);
-    return voiceCard;
+    return null;
   }
 
-  if (appState.voiceStatus === "requesting") {
-    voiceCard.classList.add("voice-activation-panel--requesting");
+  const voiceCard = document.createElement("button");
+  voiceCard.type = "button";
+  voiceCard.className = "voice-activation-panel";
 
-    const title = document.createElement("h2");
-    title.className = "voice-activation-title";
-    title.textContent = "Enabling Voice";
+  const signal = document.createElement("div");
+  signal.className = "voice-activation-signal";
+  signal.setAttribute("aria-hidden", "true");
 
-    const description = document.createElement("p");
-    description.className = "voice-activation-copy";
-    description.textContent = getVoiceActivationMessage(enableMessage);
-
-    status.textContent = "Requesting permission";
-    status.dataset.state = "requesting";
-
-    voiceCard.append(title, description, status);
-    appendVoiceError(voiceCard);
-    return voiceCard;
+  for (let i = 0; i < 5; i += 1) {
+    const bar = document.createElement("span");
+    bar.className = "voice-activation-bar";
+    signal.appendChild(bar);
   }
 
-  if (appState.voiceStatus === "unavailable") {
-    voiceCard.classList.add("voice-activation-panel--unavailable");
+  const copy = document.createElement("div");
+  copy.className = "voice-activation-copy-wrap";
 
-    const title = document.createElement("h2");
-    title.className = "voice-activation-title";
-    title.textContent = "Voice unavailable";
-
-    const description = document.createElement("p");
-    description.className = "voice-activation-copy";
-    description.textContent = getVoiceActivationMessage(enableMessage);
-
-    status.textContent = "Permission needed";
-    status.dataset.state = "unavailable";
-
-    const actions = document.createElement("div");
-    actions.className = "voice-activation-actions";
-
-    const retryButton = createButton("Try again", "secondary", () => {
-      requestMinimalVoiceActivation();
-    });
-
-    actions.append(retryButton);
-    voiceCard.append(title, description, status, actions);
-    appendVoiceError(voiceCard);
-    return voiceCard;
-  }
-
-  const title = document.createElement("h2");
+  const title = document.createElement("p");
   title.className = "voice-activation-title";
-  title.textContent = "Enable Voice";
 
   const description = document.createElement("p");
   description.className = "voice-activation-copy";
   description.textContent = getVoiceActivationMessage(enableMessage);
 
-  status.textContent = "Optional";
-  status.dataset.state = "off";
+  if (appState.voiceStatus === "requesting") {
+    voiceCard.classList.add("voice-activation-panel--requesting");
+    title.textContent = "Enabling voice commands";
+    voiceCard.disabled = true;
+  } else if (appState.voiceStatus === "unavailable") {
+    voiceCard.classList.add("voice-activation-panel--unavailable");
+    title.textContent = "Voice input not available right now";
+    voiceCard.addEventListener("click", () => {
+      requestMinimalVoiceActivation();
+    });
+  } else {
+    voiceCard.classList.add("voice-activation-panel--off");
+    title.textContent = "Enable Voice Commands";
+    voiceCard.addEventListener("click", () => {
+      requestMinimalVoiceActivation();
+    });
+  }
 
-  const actions = document.createElement("div");
-  actions.className = "voice-activation-actions";
-
-  const enableButton = createButton("Enable Voice", "primary", () => {
-    requestMinimalVoiceActivation();
-  });
-
-  const notNowButton = createButton("Not now", "secondary", () => {
-    disableMinimalVoicePreference();
-  });
-
-  actions.append(enableButton, notNowButton);
-  voiceCard.append(title, description, status, actions);
-  appendVoiceError(voiceCard);
+  copy.append(title, description);
+  voiceCard.append(signal, copy);
   return voiceCard;
 }
 
@@ -2831,6 +2779,65 @@ function createCompactVoiceStrip(options = {}) {
   return createVoiceActivationCard(
     options.hintMessage || "Use voice if you want to say \"next\" during active steps."
   );
+}
+
+function createVoiceIndicatorBar(targetScreen) {
+  if (!isVoiceRecognitionAllowedOnScreen(targetScreen)) {
+    return null;
+  }
+
+  if (appState.voiceStatus === "unavailable" && appState.voiceErrorMessage) {
+    const band = document.createElement("div");
+    band.className = "voice-indicator-bar voice-indicator-bar--error";
+
+    const signal = document.createElement("div");
+    signal.className = "voice-bars";
+    signal.setAttribute("aria-hidden", "true");
+
+    for (let i = 0; i < 5; i += 1) {
+      const bar = document.createElement("span");
+      bar.className = "voice-bar";
+      signal.appendChild(bar);
+    }
+
+    const label = document.createElement("span");
+    label.className = "voice-indicator-text";
+    label.textContent = "Voice input not available right now";
+
+    band.append(signal, label);
+    return band;
+  }
+
+  if (!isVoiceReady()) {
+    return null;
+  }
+
+  const band = document.createElement("div");
+  band.className = "voice-indicator-bar voice-indicator-bar--ready";
+  if (appState.voiceUserSpeaking) {
+    band.classList.add("voice-indicator-bar--listening");
+  }
+
+  const signal = document.createElement("div");
+  signal.className = "voice-bars";
+  signal.setAttribute("aria-hidden", "true");
+
+  for (let i = 0; i < 5; i += 1) {
+    const bar = document.createElement("span");
+    bar.className = "voice-bar";
+    signal.appendChild(bar);
+  }
+
+  const label = document.createElement("span");
+  label.className = "voice-indicator-text";
+  label.textContent = appState.voiceUserSpeaking ? "Listening..." : "Voice commands enabled";
+
+  const stopButton = createButton("Stop", "secondary voice-indicator-stop", () => {
+    disableMinimalVoicePreference();
+  });
+
+  band.append(signal, label, stopButton);
+  return band;
 }
 
 function unlockVoiceAssistant(options = {}) {
@@ -4200,44 +4207,6 @@ function setVoiceHint(message, timeoutMs = 2500) {
       renderTimerActive();
     }
   }, timeoutMs);
-}
-
-function createVoiceIndicatorBar(targetScreen) {
-  const trigger = document.createElement("button");
-  trigger.type = "button";
-  trigger.className = "voice-indicator-bar";
-  const voiceAvailableOnScreen = isMinimalVoiceAvailableOnScreen(targetScreen);
-  const voiceReady = isVoiceReady() && isVoiceRecognitionAllowedOnScreen(targetScreen);
-  const voiceStateClass = !voiceReady ? "voice-off" : isVoiceUiActive() ? "voice-active" : "voice-idle";
-  const indicatorLabel = !voiceAvailableOnScreen
-    ? "Voice unavailable on this screen"
-    : voiceReady
-      ? (appState.voiceListening ? "Voice listening" : "Voice ready")
-      : appState.voiceStatus === "unavailable"
-        ? "Voice unavailable"
-        : "Voice off";
-  trigger.classList.add(voiceStateClass);
-  trigger.setAttribute("aria-label", indicatorLabel);
-  trigger.disabled = true;
-
-  const bars = document.createElement("div");
-  bars.className = "voice-bars";
-
-  for (let i = 0; i < 5; i += 1) {
-    const bar = document.createElement("span");
-    bar.className = "voice-bar";
-    bars.appendChild(bar);
-  }
-
-  trigger.appendChild(bars);
-  if (!voiceReady || !voiceAvailableOnScreen) {
-    const label = document.createElement("span");
-    label.className = "voice-indicator-text";
-    label.textContent = indicatorLabel;
-    trigger.appendChild(label);
-  }
-
-  return trigger;
 }
 
 function openVoiceSettingsModal(targetScreen) {
@@ -5662,7 +5631,10 @@ function renderIngredientsIntro() {
 
   header.append(title, stageLabel);
   main.append(recipeIcon, description);
-  main.appendChild(createVoiceActivationCard("Turn on voice here if you want to say \"next\" during active preparation and cooking steps. Intro screens still advance by tap."));
+  const voiceActivation = createVoiceActivationCard("Turn on voice here if you want to say \"next\" during active preparation and cooking steps. Intro screens still advance by tap.");
+  if (voiceActivation) {
+    main.appendChild(voiceActivation);
+  }
   footer.appendChild(createStageActionRow(
     {
       onClick: () => setScreen("analysis")
@@ -5692,7 +5664,10 @@ function renderPreparationIntro() {
 
   header.append(title, stageLabel);
   main.append(recipeIcon, description);
-  main.appendChild(createVoiceActivationCard("Turn on voice here if you want to say \"next\" during active preparation and cooking steps. Intro screens still advance by tap."));
+  const voiceActivation = createVoiceActivationCard("Turn on voice here if you want to say \"next\" during active preparation and cooking steps. Intro screens still advance by tap.");
+  if (voiceActivation) {
+    main.appendChild(voiceActivation);
+  }
   footer.appendChild(createStageActionRow(
     {
       onClick: () => setScreen("ingredients")
@@ -5718,7 +5693,10 @@ function renderCookingIntro() {
 
   header.append(title, stageLabel);
   main.append(recipeIcon);
-  main.appendChild(createVoiceActivationCard("Turn on voice here if you want to say \"next\" during active preparation and cooking steps. Intro screens still advance by tap."));
+  const voiceActivation = createVoiceActivationCard("Turn on voice here if you want to say \"next\" during active preparation and cooking steps. Intro screens still advance by tap.");
+  if (voiceActivation) {
+    main.appendChild(voiceActivation);
+  }
   footer.appendChild(createStageActionRow(
     {
       onClick: () => openPreparationIntro()
@@ -5742,8 +5720,10 @@ function renderIngredients(options = {}) {
   }
 
   const { content, footer } = createTitledPage("Ingredient Check", "Verify ingredients before you begin");
-  content.appendChild(createVoiceIndicatorBar("ingredients"));
-  appendVoiceError(content);
+  const voiceIndicator = createVoiceIndicatorBar("ingredients");
+  if (voiceIndicator) {
+    content.appendChild(voiceIndicator);
+  }
 
   const card = createCard();
   const list = document.createElement("ul");
@@ -5830,8 +5810,10 @@ function renderPreparation() {
   const currentText = appState.recipe.preparationSteps[idx];
 
   const { content, footer } = createTitledPage("Preparation", `Preparation ${idx + 1} of ${total}`, "page-shell--guided preparation-screen");
-  content.appendChild(createVoiceIndicatorBar("preparation"));
-  appendVoiceError(content);
+  const voiceIndicator = createVoiceIndicatorBar("preparation");
+  if (voiceIndicator) {
+    content.appendChild(voiceIndicator);
+  }
   content.appendChild(createScrollableStepPanel(
     appState.recipe.preparationSteps.map((stepText) => ({ text: stepText })),
     idx,
@@ -6052,8 +6034,10 @@ function renderCooking() {
   top.append(recipeName, stepMeta);
   header.appendChild(top);
 
-  content.appendChild(createVoiceIndicatorBar("cooking"));
-  appendVoiceError(content);
+  const voiceIndicator = createVoiceIndicatorBar("cooking");
+  if (voiceIndicator) {
+    content.appendChild(voiceIndicator);
+  }
 
   if (hasTimer) {
     ensureCurrentStepTimerStarted();
@@ -6167,8 +6151,10 @@ function renderTimerActive() {
     { panelLabel: "Cooking steps", showTimers: true }
   ));
 
-  content.appendChild(createVoiceIndicatorBar("timerActive"));
-  appendVoiceError(content);
+  const voiceIndicator = createVoiceIndicatorBar("timerActive");
+  if (voiceIndicator) {
+    content.appendChild(voiceIndicator);
+  }
 
   if (appState.lastSpokenCookingIndex !== idx) {
     speak(step.text);
