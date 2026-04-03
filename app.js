@@ -244,7 +244,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v108"; 
+const BUILD_VERSION = "DEV BUILD: v109"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -270,7 +270,7 @@ const COOKING_KEYWORDS = [
 // Temporary debug isolation: intro screens are click-only so we can determine
 // whether unwanted intro auto-advances are coming from voice handling or from
 // non-voice intro logic.
-const INTRO_SCREENS_CLICK_ONLY_DEBUG = true;
+const INTRO_SCREENS_CLICK_ONLY_DEBUG = false;
 const RECIPE_FLOW_PROTOTYPE_EXAMPLES = [
   {
     title: "Ina Garten's Perfect Roast Chicken",
@@ -1301,6 +1301,10 @@ function clearMinimalVoiceTranscriptState() {
 }
 
 function isMinimalVoiceNextAvailable() {
+  if (isIntroScreen(appState.currentScreen)) {
+    return true;
+  }
+
   if (appState.currentScreen === "ingredients") {
     return true;
   }
@@ -1319,6 +1323,78 @@ function isMinimalVoiceNextAvailable() {
   return !timerInteractionActive;
 }
 
+function runProgressionNextAction(screenName = appState.currentScreen, source = "tap") {
+  const triggerAt = getVoiceTimestamp();
+
+  if (screenName === "ingredientsIntro") {
+    requestIntroAdvance(
+      "ingredientsIntro",
+      source,
+      triggerAt,
+      () => {
+        recordVoiceDebugEvent(`intro-advance-triggered-by-${source}`, {
+          introScreen: "ingredientsIntro",
+          triggerAction: "primary-button"
+        });
+        setScreen("ingredients");
+      },
+      "primary-button"
+    );
+    return;
+  }
+
+  if (screenName === "ingredients") {
+    openPreparationIntro();
+    return;
+  }
+
+  if (screenName === "preparationIntro") {
+    requestIntroAdvance(
+      "preparationIntro",
+      source,
+      triggerAt,
+      () => {
+        recordVoiceDebugEvent(`intro-advance-triggered-by-${source}`, {
+          introScreen: "preparationIntro",
+          triggerAction: "primary-button"
+        });
+        startPreparationFlow();
+      },
+      "primary-button"
+    );
+    return;
+  }
+
+  if (screenName === "preparation") {
+    advancePreparationStep();
+    return;
+  }
+
+  if (screenName === "cookingIntro") {
+    requestIntroAdvance(
+      "cookingIntro",
+      source,
+      triggerAt,
+      () => {
+        recordVoiceDebugEvent(`intro-advance-triggered-by-${source}`, {
+          introScreen: "cookingIntro",
+          triggerAction: "primary-button"
+        });
+        enterCookingFlow({
+          source: source === "fresh-voice" ? "voice-next" : "button-next",
+          triggerDetail: "cookingIntro-primary-button"
+        });
+      },
+      "primary-button"
+    );
+    return;
+  }
+
+  if (screenName === "cooking") {
+    goToNextCookingStep();
+  }
+}
+
 function executeMinimalVoiceNext() {
   if (!isMinimalVoiceScreen(appState.currentScreen)) {
     clearMinimalVoiceTranscriptState();
@@ -1333,14 +1409,7 @@ function executeMinimalVoiceNext() {
 
   appState.voiceLastMatchedCommand = "next";
   appState.voiceLastAction = "next";
-
-  if (appState.currentScreen === "ingredients") {
-    openPreparationIntro();
-  } else if (appState.currentScreen === "preparation") {
-    advancePreparationStep();
-  } else if (appState.currentScreen === "cooking") {
-    goToNextCookingStep();
-  }
+  runProgressionNextAction(appState.currentScreen, "fresh-voice");
 
   clearMinimalVoiceTranscriptState();
 }
@@ -1373,7 +1442,7 @@ function startMinimalVoiceController() {
     minimalVoiceRecognition = new MinimalSpeechRecognition();
     minimalVoiceRecognition.lang = "en-US";
     minimalVoiceRecognition.continuous = true;
-    minimalVoiceRecognition.interimResults = false;
+    minimalVoiceRecognition.interimResults = true;
 
     minimalVoiceRecognition.onstart = () => {
       appState.voiceListening = true;
@@ -1384,28 +1453,38 @@ function startMinimalVoiceController() {
     };
 
     minimalVoiceRecognition.onresult = (event) => {
-      const result = event.results?.[event.resultIndex];
-      const transcript = (result?.[0]?.transcript || "").trim();
-      if (!transcript || !shouldListenForMinimalVoiceCommands(appState.currentScreen)) {
+      if (!shouldListenForMinimalVoiceCommands(appState.currentScreen)) {
         clearMinimalVoiceTranscriptState();
         return;
       }
 
-      const normalizedTranscript = normalizeVoiceCommandText(transcript);
-      appState.voiceHeard = transcript;
-      appState.voiceLastTranscript = transcript;
-      appState.voiceLastTranscriptAt = getVoiceTimestamp();
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const result = event.results[i];
+        const transcript = (result?.[0]?.transcript || "").trim();
+        if (!transcript) {
+          continue;
+        }
 
-      if (normalizedTranscript.includes("next")) {
+        const normalizedTranscript = normalizeVoiceCommandText(transcript);
+        appState.voiceHeard = transcript;
+        appState.voiceLastTranscript = transcript;
+        appState.voiceLastTranscriptAt = getVoiceTimestamp();
+
+        if (!normalizedTranscript.includes("next")) {
+          continue;
+        }
+
         const commandKey = `${appState.currentScreen}:${appState.voiceRecognitionSessionId}:${normalizedTranscript}`;
         if (lastVoiceHandledCommand.key === commandKey) {
           return;
         }
+
         lastVoiceHandledCommand = {
           key: commandKey,
           transcript,
           at: getVoiceTimestamp()
         };
+
         try {
           minimalVoiceRecognition.abort();
         } catch {
@@ -1652,11 +1731,20 @@ function isGuidanceScreen(screenName) {
 }
 
 function getVoiceScreenMode(screenName = appState.currentScreen) {
+  if (screenName === "ingredientsIntro") {
+    return "ingredientsIntro";
+  }
   if (screenName === "ingredients") {
     return "ingredients";
   }
+  if (screenName === "preparationIntro") {
+    return "preparationIntro";
+  }
   if (screenName === "preparation") {
     return "preparation";
+  }
+  if (screenName === "cookingIntro") {
+    return "cookingIntro";
   }
   if (screenName === "cooking") {
     return "cooking";
@@ -1665,8 +1753,11 @@ function getVoiceScreenMode(screenName = appState.currentScreen) {
 }
 
 function isMinimalVoiceScreen(screenName = appState.currentScreen) {
-  return screenName === "ingredients" ||
+  return screenName === "ingredientsIntro" ||
+    screenName === "ingredients" ||
+    screenName === "preparationIntro" ||
     screenName === "preparation" ||
+    screenName === "cookingIntro" ||
     screenName === "cooking";
 }
 
@@ -5577,21 +5668,7 @@ function renderIngredientsIntro() {
       onClick: () => setScreen("analysis")
     },
     {
-      onClick: () => {
-        requestIntroAdvance(
-          "ingredientsIntro",
-          "click",
-          getVoiceTimestamp(),
-          () => {
-            recordVoiceDebugEvent("intro-advance-triggered-by-click", {
-              introScreen: "ingredientsIntro",
-              triggerAction: "primary-button"
-            });
-            setScreen("ingredients");
-          },
-          "primary-button"
-        );
-      }
+      onClick: () => runProgressionNextAction("ingredientsIntro", "click")
     }
   ));
 }
@@ -5621,21 +5698,7 @@ function renderPreparationIntro() {
       onClick: () => setScreen("ingredients")
     },
     {
-      onClick: () => {
-        requestIntroAdvance(
-          "preparationIntro",
-          "click",
-          getVoiceTimestamp(),
-          () => {
-            recordVoiceDebugEvent("intro-advance-triggered-by-click", {
-              introScreen: "preparationIntro",
-              triggerAction: "primary-button"
-            });
-            startPreparationFlow();
-          },
-          "primary-button"
-        );
-      }
+      onClick: () => runProgressionNextAction("preparationIntro", "click")
     }
   ));
 }
@@ -5661,24 +5724,7 @@ function renderCookingIntro() {
       onClick: () => openPreparationIntro()
     },
     {
-      onClick: () => {
-        requestIntroAdvance(
-          "cookingIntro",
-          "click",
-          getVoiceTimestamp(),
-          () => {
-            recordVoiceDebugEvent("intro-advance-triggered-by-click", {
-              introScreen: "cookingIntro",
-              triggerAction: "primary-button"
-            });
-            enterCookingFlow({
-              source: "button-next",
-              triggerDetail: "cookingIntro-primary-button"
-            });
-          },
-          "primary-button"
-        );
-      }
+      onClick: () => runProgressionNextAction("cookingIntro", "click")
     }
   ));
 }
@@ -5750,7 +5796,7 @@ function renderIngredients(options = {}) {
       onClick: () => setScreen("ingredientsIntro")
     },
     {
-      onClick: () => setScreen("preparationIntro")
+      onClick: () => runProgressionNextAction("ingredients", "click")
     }
   ));
 
