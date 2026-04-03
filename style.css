@@ -1364,6 +1364,11 @@ button.danger,
   text-align: left;
 }
 
+button.intro-voice-panel {
+  color: inherit;
+  box-shadow: none;
+}
+
 .intro-voice-panel--off {
   background: #ffffff;
   border-color: #d7dde8;
@@ -1379,6 +1384,20 @@ button.danger,
   background: #dff2e9;
   border-color: #b7dfcb;
   color: #111827;
+}
+
+button.intro-voice-panel:hover,
+button.intro-voice-panel:focus-visible {
+  background: #f8fafc;
+  border-color: #d7dde8;
+}
+
+button.intro-voice-panel.intro-voice-panel--on:hover,
+button.intro-voice-panel.intro-voice-panel--on:focus-visible,
+button.intro-voice-panel.is-on:hover,
+button.intro-voice-panel.is-on:focus-visible {
+  background: #dff2e9;
+  border-color: #b7dfcb;
 }
 
 .intro-voice-panel__icon {
