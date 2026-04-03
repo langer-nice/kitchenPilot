@@ -6125,6 +6125,5 @@ window.addEventListener("kitchenpilot:voice-speech-end", () => {
   }
 });
 
-ensureTimerOverlay();
 updateTimerOverlay();
 setScreen("onboarding");
