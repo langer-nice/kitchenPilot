@@ -163,8 +163,57 @@ function isVoiceReady() {
   return Boolean(appState.voiceEnabled && appState.voiceStatus === "ready");
 }
 
+function getIntroVoicePanelVisualState() {
+  return Boolean(
+    appState.voiceStatus !== "unavailable" &&
+    (appState.voiceEnabled || appState.voiceUnlocked || appState.voiceListening || isVoiceReady())
+  )
+    ? "on"
+    : "off";
+}
+
 function isIntroVoicePanelEnabled() {
-  return Boolean(appState.voiceEnabled && (appState.voiceStatus === "ready" || appState.voiceUnlocked));
+  return getIntroVoicePanelVisualState() === "on";
+}
+
+function createIntroVoicePanel() {
+  const introVoicePanelState = getIntroVoicePanelVisualState();
+  const introVoicePanelEnabled = introVoicePanelState === "on";
+
+  const voicePanel = document.createElement("button");
+  voicePanel.type = "button";
+  voicePanel.className = `intro-voice-panel intro-voice-panel--${introVoicePanelState}`;
+  voicePanel.dataset.voiceState = introVoicePanelState;
+  voicePanel.setAttribute("aria-pressed", introVoicePanelEnabled ? "true" : "false");
+  if (introVoicePanelEnabled) {
+    voicePanel.classList.add("is-on");
+  }
+  voicePanel.addEventListener("click", () => {
+    if (introVoicePanelEnabled) {
+      disableMinimalVoicePreference();
+      return;
+    }
+    requestMinimalVoiceActivation();
+  });
+
+  const voiceIcon = document.createElement("i");
+  voiceIcon.className = `fa-solid ${introVoicePanelEnabled ? "fa-microphone" : "fa-microphone-slash"} intro-voice-panel__icon`;
+  voiceIcon.setAttribute("aria-hidden", "true");
+
+  const voiceLabel = document.createElement("span");
+  voiceLabel.className = "intro-voice-panel__label";
+  voiceLabel.textContent = introVoicePanelEnabled ? "Voice Commands Enabled" : "Enable Voice Commands";
+
+  voicePanel.append(voiceIcon, voiceLabel);
+
+  if (introVoicePanelEnabled) {
+    const stopLabel = document.createElement("span");
+    stopLabel.className = "intro-voice-panel__stop";
+    stopLabel.textContent = "Stop";
+    voicePanel.appendChild(stopLabel);
+  }
+
+  return voicePanel;
 }
 
 const VOICE_SYSTEM_ENABLED = false;
@@ -248,7 +297,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v112"; 
+const BUILD_VERSION = "DEV BUILD: v113"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -5618,7 +5667,6 @@ function renderStageIntro(title, description, backScreen, continueScreen, contin
 
 function renderIngredientsIntro() {
   const { header, main, footer } = createStageScreenShell();
-  const introVoicePanelEnabled = isIntroVoicePanelEnabled();
 
   const title = document.createElement("h1");
   title.className = "stage-title";
@@ -5636,39 +5684,7 @@ function renderIngredientsIntro() {
 
   header.append(title, stageLabel);
   main.append(recipeIcon, description);
-
-  const voicePanel = document.createElement("button");
-  voicePanel.type = "button";
-  voicePanel.className = "intro-voice-panel";
-  if (introVoicePanelEnabled) {
-    voicePanel.classList.add("is-on");
-  }
-  voicePanel.addEventListener("click", () => {
-    if (introVoicePanelEnabled) {
-      disableMinimalVoicePreference();
-      return;
-    }
-    requestMinimalVoiceActivation();
-  });
-
-  const voiceIcon = document.createElement("i");
-  voiceIcon.className = `fa-solid ${introVoicePanelEnabled ? "fa-microphone" : "fa-microphone-slash"} intro-voice-panel__icon`;
-  voiceIcon.setAttribute("aria-hidden", "true");
-
-  const voiceLabel = document.createElement("span");
-  voiceLabel.className = "intro-voice-panel__label";
-  voiceLabel.textContent = introVoicePanelEnabled ? "Voice Commands Enabled" : "Enable Voice Commands";
-
-  voicePanel.append(voiceIcon, voiceLabel);
-
-  if (introVoicePanelEnabled) {
-    const stopLabel = document.createElement("span");
-    stopLabel.className = "intro-voice-panel__stop";
-    stopLabel.textContent = "Stop";
-    voicePanel.appendChild(stopLabel);
-  }
-
-  main.appendChild(voicePanel);
+  main.appendChild(createIntroVoicePanel());
 
   footer.appendChild(createStageActionRow(
     {
@@ -5682,7 +5698,6 @@ function renderIngredientsIntro() {
 
 function renderPreparationIntro() {
   const { header, main, footer } = createStageScreenShell();
-  const introVoicePanelEnabled = isIntroVoicePanelEnabled();
 
   const title = document.createElement("h1");
   title.className = "stage-title";
@@ -5700,39 +5715,7 @@ function renderPreparationIntro() {
 
   header.append(title, stageLabel);
   main.append(recipeIcon, description);
-
-  const voicePanel = document.createElement("button");
-  voicePanel.type = "button";
-  voicePanel.className = "intro-voice-panel";
-  if (introVoicePanelEnabled) {
-    voicePanel.classList.add("is-on");
-  }
-  voicePanel.addEventListener("click", () => {
-    if (introVoicePanelEnabled) {
-      disableMinimalVoicePreference();
-      return;
-    }
-    requestMinimalVoiceActivation();
-  });
-
-  const voiceIcon = document.createElement("i");
-  voiceIcon.className = `fa-solid ${introVoicePanelEnabled ? "fa-microphone" : "fa-microphone-slash"} intro-voice-panel__icon`;
-  voiceIcon.setAttribute("aria-hidden", "true");
-
-  const voiceLabel = document.createElement("span");
-  voiceLabel.className = "intro-voice-panel__label";
-  voiceLabel.textContent = introVoicePanelEnabled ? "Voice Commands Enabled" : "Enable Voice Commands";
-
-  voicePanel.append(voiceIcon, voiceLabel);
-
-  if (introVoicePanelEnabled) {
-    const stopLabel = document.createElement("span");
-    stopLabel.className = "intro-voice-panel__stop";
-    stopLabel.textContent = "Stop";
-    voicePanel.appendChild(stopLabel);
-  }
-
-  main.appendChild(voicePanel);
+  main.appendChild(createIntroVoicePanel());
 
   footer.appendChild(createStageActionRow(
     {
@@ -5746,7 +5729,6 @@ function renderPreparationIntro() {
 
 function renderCookingIntro() {
   const { header, main, footer } = createStageScreenShell();
-  const introVoicePanelEnabled = isIntroVoicePanelEnabled();
 
   const title = document.createElement("h1");
   title.className = "stage-title";
@@ -5760,39 +5742,7 @@ function renderCookingIntro() {
 
   header.append(title, stageLabel);
   main.append(recipeIcon);
-
-  const voicePanel = document.createElement("button");
-  voicePanel.type = "button";
-  voicePanel.className = "intro-voice-panel";
-  if (introVoicePanelEnabled) {
-    voicePanel.classList.add("is-on");
-  }
-  voicePanel.addEventListener("click", () => {
-    if (introVoicePanelEnabled) {
-      disableMinimalVoicePreference();
-      return;
-    }
-    requestMinimalVoiceActivation();
-  });
-
-  const voiceIcon = document.createElement("i");
-  voiceIcon.className = `fa-solid ${introVoicePanelEnabled ? "fa-microphone" : "fa-microphone-slash"} intro-voice-panel__icon`;
-  voiceIcon.setAttribute("aria-hidden", "true");
-
-  const voiceLabel = document.createElement("span");
-  voiceLabel.className = "intro-voice-panel__label";
-  voiceLabel.textContent = introVoicePanelEnabled ? "Voice Commands Enabled" : "Enable Voice Commands";
-
-  voicePanel.append(voiceIcon, voiceLabel);
-
-  if (introVoicePanelEnabled) {
-    const stopLabel = document.createElement("span");
-    stopLabel.className = "intro-voice-panel__stop";
-    stopLabel.textContent = "Stop";
-    voicePanel.appendChild(stopLabel);
-  }
-
-  main.appendChild(voicePanel);
+  main.appendChild(createIntroVoicePanel());
 
   footer.appendChild(createStageActionRow(
     {

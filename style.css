@@ -1364,9 +1364,21 @@ button.danger,
   text-align: left;
 }
 
+.intro-voice-panel--off {
+  background: #ffffff;
+  border-color: #d7dde8;
+  color: #111827;
+}
+
 .intro-voice-panel.is-on {
   background: #dff2e9;
   border-color: #b7dfcb;
+}
+
+.intro-voice-panel--on {
+  background: #dff2e9;
+  border-color: #b7dfcb;
+  color: #111827;
 }
 
 .intro-voice-panel__icon {
