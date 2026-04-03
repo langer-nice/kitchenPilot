@@ -16,6 +16,7 @@ const appState = {
   activeTimerSeconds: null,
   timerPaused: false,
   voiceEnabled: false,
+  headerMenuOpen: false,
   voiceUnlocked: false,
   voiceListening: false,
   voiceRecognitionSessionId: 0,
@@ -4260,12 +4261,13 @@ function createPageShell(screenClassName = "") {
 
   pageFooter.append(
     footer,
-    timerOverlay,
-    createBottomNavigation(getBottomNavSection())
+    timerOverlay
   );
 
   page.append(header, content, pageFooter);
   appEl.appendChild(page);
+
+  header.appendChild(createHeaderMenu());
 
   if (isVoiceDebugUiEnabled()) {
     header.appendChild(createVoiceDebugCopyButton());
@@ -4293,7 +4295,7 @@ function createTitledPage(title, subtitle, screenClassName = "") {
 }
 
 function createStageScreenShell(options = {}) {
-  const { screenClassName = "", navSection = getBottomNavSection() } = options;
+  const { screenClassName = "" } = options;
 
   appEl.innerHTML = "";
 
@@ -4316,12 +4318,13 @@ function createStageScreenShell(options = {}) {
 
   pageFooter.append(
     footer,
-    timerOverlay,
-    createBottomNavigation(navSection)
+    timerOverlay
   );
 
   screen.append(header, main, pageFooter);
   appEl.appendChild(screen);
+
+  header.appendChild(createHeaderMenu());
 
   if (isVoiceDebugUiEnabled()) {
     header.appendChild(createVoiceDebugCopyButton());
@@ -4331,38 +4334,7 @@ function createStageScreenShell(options = {}) {
   return { screen, header, main, footer, pageFooter };
 }
 
-function getBottomNavSection(screenName = appState.currentScreen) {
-  if (screenName === "home") {
-    return "home";
-  }
-
-  if (screenName === "menu") {
-    return "menu";
-  }
-
-  if (
-    screenName === "analysis" ||
-    screenName === "ingredientsIntro" ||
-    screenName === "ingredients" ||
-    screenName === "preparationIntro" ||
-    screenName === "preparation"
-  ) {
-    return "ingredients";
-  }
-
-  if (
-    screenName === "cookingIntro" ||
-    screenName === "cooking" ||
-    screenName === "timerActive" ||
-    screenName === "completed"
-  ) {
-    return "cooking";
-  }
-
-  return null;
-}
-
-function getBottomNavTarget(sectionKey) {
+function getSectionNavigationTarget(sectionKey) {
   if (sectionKey === "home") {
     return "home";
   }
@@ -4386,7 +4358,7 @@ function getBottomNavTarget(sectionKey) {
   return "home";
 }
 
-function isBottomNavSectionEnabled(sectionKey) {
+function isSectionNavigationEnabled(sectionKey) {
   if (sectionKey === "ingredients" || sectionKey === "cooking") {
     return Boolean(appState.recipe);
   }
@@ -4395,61 +4367,127 @@ function isBottomNavSectionEnabled(sectionKey) {
 }
 
 function navigateToPrimarySection(sectionKey) {
-  if (!isBottomNavSectionEnabled(sectionKey)) {
+  if (!isSectionNavigationEnabled(sectionKey)) {
     return;
   }
-  const targetScreen = getBottomNavTarget(sectionKey);
+  appState.headerMenuOpen = false;
+  const targetScreen = getSectionNavigationTarget(sectionKey);
   setScreen(targetScreen);
 }
 
-function createBottomNavigation(activeSection) {
-  const nav = document.createElement("nav");
-  nav.className = "bottom-nav";
-  nav.setAttribute("aria-label", "Primary");
+function rerenderCurrentScreen() {
+  switch (appState.currentScreen) {
+    case "onboarding":
+      renderOnboarding();
+      break;
+    case "home":
+      renderHome();
+      break;
+    case "menu":
+      renderMenu();
+      break;
+    case "analysis":
+      renderAnalysis();
+      break;
+    case "ingredientsIntro":
+      renderIngredientsIntro();
+      break;
+    case "ingredients":
+      renderIngredients();
+      break;
+    case "preparationIntro":
+      renderPreparationIntro();
+      break;
+    case "preparation":
+      renderPreparation();
+      break;
+    case "cookingIntro":
+      renderCookingIntro();
+      break;
+    case "cooking":
+      renderCooking();
+      break;
+    case "timerActive":
+      renderTimerActive();
+      break;
+    case "completed":
+      renderCompleted();
+      break;
+    default:
+      renderHome();
+  }
+}
 
-  const items = [
-    { key: "home", label: "Home", iconClass: "fa-solid fa-house" },
-    { key: "ingredients", label: "Ingredients", iconClass: "fa-solid fa-list-check" },
-    { key: "cooking", label: "Cooking", iconClass: "fa-solid fa-fire-burner" },
-    { key: "menu", label: "Menu", iconClass: "fa-solid fa-bars" }
-  ];
+function createHeaderMenu() {
+  const wrap = document.createElement("div");
+  wrap.className = "header-menu";
 
-  items.forEach((item) => {
-    const button = document.createElement("button");
-    const isActive = item.key === activeSection;
-    const isEnabled = isBottomNavSectionEnabled(item.key);
-    button.type = "button";
-    button.className = [
-      "bottom-nav__item",
-      isActive ? "is-active" : "",
-      !isEnabled ? "is-disabled" : ""
-    ].filter(Boolean).join(" ");
-    if (isActive) {
-      button.setAttribute("aria-current", "page");
-    }
-    if (!isEnabled) {
-      button.disabled = true;
-      button.setAttribute("aria-disabled", "true");
-      button.tabIndex = -1;
-    } else {
-      button.addEventListener("click", () => {
-        navigateToPrimarySection(item.key);
-      });
-    }
-
-    const icon = document.createElement("i");
-    icon.className = `${item.iconClass} bottom-nav__icon`;
-    icon.setAttribute("aria-hidden", "true");
-
-    const label = document.createElement("span");
-    label.className = "bottom-nav__label";
-    label.textContent = item.label;
-
-    button.append(icon, label);
-    nav.appendChild(button);
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "header-menu__button btn btn-secondary";
+  button.setAttribute("aria-label", "Open navigation menu");
+  button.setAttribute("aria-expanded", appState.headerMenuOpen ? "true" : "false");
+  button.innerHTML = '<i class="fa-solid fa-bars" aria-hidden="true"></i>';
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    appState.headerMenuOpen = !appState.headerMenuOpen;
+    rerenderCurrentScreen();
   });
 
-  return nav;
+  wrap.appendChild(button);
+
+  if (appState.headerMenuOpen) {
+    const panel = document.createElement("div");
+    panel.className = "header-menu__panel";
+
+    const items = [
+      { key: "home", label: "Home", iconClass: "fa-solid fa-house" },
+      { key: "ingredients", label: "Ingredients", iconClass: "fa-solid fa-list-check" },
+      { key: "cooking", label: "Cooking", iconClass: "fa-solid fa-fire-burner" },
+      { key: "menu", label: "Menu", iconClass: "fa-solid fa-gear" }
+    ];
+
+    items.forEach((item) => {
+      const action = document.createElement("button");
+      const isEnabled = isSectionNavigationEnabled(item.key);
+      action.type = "button";
+      action.className = ["header-menu__item", !isEnabled ? "is-disabled" : ""].filter(Boolean).join(" ");
+      if (!isEnabled) {
+        action.disabled = true;
+        action.setAttribute("aria-disabled", "true");
+      } else {
+        action.addEventListener("click", () => {
+          navigateToPrimarySection(item.key);
+        });
+      }
+
+      const icon = document.createElement("i");
+      icon.className = item.iconClass;
+      icon.setAttribute("aria-hidden", "true");
+
+      const label = document.createElement("span");
+      label.textContent = item.label;
+
+      action.append(icon, label);
+      panel.appendChild(action);
+    });
+
+    wrap.appendChild(panel);
+
+    window.setTimeout(() => {
+      const handleOutsideClick = (event) => {
+        if (!wrap.contains(event.target)) {
+          appState.headerMenuOpen = false;
+          document.removeEventListener("click", handleOutsideClick);
+          rerenderCurrentScreen();
+        }
+      };
+
+      document.addEventListener("click", handleOutsideClick);
+    }, 0);
+  }
+
+  return wrap;
 }
 
 function createActionButtonsRow(buttonConfigs, className = "") {
@@ -5384,9 +5422,7 @@ function renderStageIntro(title, description, backScreen, continueScreen, contin
 }
 
 function renderIngredientsIntro() {
-  const { header, main, footer } = createStageScreenShell({
-    navSection: "ingredients"
-  });
+  const { header, main, footer } = createStageScreenShell();
 
   const title = document.createElement("h1");
   title.className = "stage-title";
@@ -5439,9 +5475,7 @@ function renderIngredientsIntro() {
 }
 
 function renderPreparationIntro() {
-  const { header, main, footer } = createStageScreenShell({
-    navSection: "ingredients"
-  });
+  const { header, main, footer } = createStageScreenShell();
 
   const title = document.createElement("h1");
   title.className = "stage-title";
@@ -5485,9 +5519,7 @@ function renderPreparationIntro() {
 }
 
 function renderCookingIntro() {
-  const { header, main, footer } = createStageScreenShell({
-    navSection: "cooking"
-  });
+  const { header, main, footer } = createStageScreenShell();
 
   const title = document.createElement("h1");
   title.className = "stage-title";
@@ -5996,8 +6028,7 @@ function renderTimerActive() {
 
 function renderCompleted() {
   const { header, main, footer } = createStageScreenShell({
-    screenClassName: "completed-screen",
-    navSection: "cooking"
+    screenClassName: "completed-screen"
   });
 
   const title = document.createElement("h1");
