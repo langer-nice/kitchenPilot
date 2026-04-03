@@ -70,11 +70,11 @@ function createTimerOverlayElement() {
   overlay.className = "timer-overlay hidden";
 
   const panel = document.createElement("div");
-  panel.className = "timer-panel";
+  panel.className = "timer-utility-panel";
 
   const display = document.createElement("div");
-  display.className = "timer-display";
-  display.innerHTML = '⏱ <span id="timer-value">00:00</span>';
+  display.className = "timer-utility-display";
+  display.innerHTML = '<span class="timer-display__icon" aria-hidden="true">⏱</span><span id="timer-value">00:00</span>';
 
   const actions = document.createElement("div");
   actions.className = "timer-actions";
@@ -230,7 +230,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v103"; 
+const BUILD_VERSION = "DEV BUILD: v104"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
