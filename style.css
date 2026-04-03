@@ -1349,6 +1349,122 @@ button.danger,
   cursor: pointer;
 }
 
+.intro-voice-panel {
+  width: 100%;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  border: 1px solid #d7dde8;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #111827;
+  box-shadow: none;
+  text-align: left;
+}
+
+.intro-voice-panel.is-on {
+  background: #dff2e9;
+  border-color: #b7dfcb;
+}
+
+.intro-voice-panel__icon {
+  font-size: 1.05rem;
+}
+
+.intro-voice-panel__label {
+  font-size: 0.98rem;
+  font-weight: 600;
+}
+
+.intro-voice-panel__stop {
+  margin-left: auto;
+  font-size: 0.98rem;
+  font-weight: 600;
+}
+
+.active-voice-bar {
+  width: 100%;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+  border-radius: 12px;
+  background: #eef1f6;
+  color: #8a94a6;
+}
+
+.active-voice-bar.is-active {
+  background: #dff2e9;
+  color: #1f7a52;
+}
+
+.active-voice-bar.is-error {
+  background: #f7d9dc;
+  color: #b32632;
+}
+
+.active-voice-bar__wave {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 28px;
+}
+
+.active-voice-bar__wave-bar {
+  width: 3px;
+  height: 12px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.9;
+  transform-origin: center bottom;
+  transform: scaleY(0.85);
+}
+
+.active-voice-bar__wave-bar:nth-child(2) {
+  height: 15px;
+}
+
+.active-voice-bar__wave-bar:nth-child(3) {
+  height: 18px;
+}
+
+.active-voice-bar__wave-bar:nth-child(4) {
+  height: 15px;
+}
+
+.active-voice-bar__wave-bar:nth-child(5) {
+  height: 12px;
+}
+
+.active-voice-bar.is-listening .active-voice-bar__wave-bar {
+  animation: voice-bars-active 0.5s ease-in-out infinite;
+}
+
+.active-voice-bar.is-listening .active-voice-bar__wave-bar:nth-child(2) {
+  animation-delay: 0.08s;
+}
+
+.active-voice-bar.is-listening .active-voice-bar__wave-bar:nth-child(3) {
+  animation-delay: 0.16s;
+}
+
+.active-voice-bar.is-listening .active-voice-bar__wave-bar:nth-child(4) {
+  animation-delay: 0.24s;
+}
+
+.active-voice-bar.is-listening .active-voice-bar__wave-bar:nth-child(5) {
+  animation-delay: 0.32s;
+}
+
+.active-voice-bar__text {
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
 .voice-activation-title {
   margin: 0;
   font-size: 0.95rem;

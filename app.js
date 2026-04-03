@@ -244,7 +244,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v109"; 
+const BUILD_VERSION = "DEV BUILD: v110"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -5631,18 +5631,48 @@ function renderIngredientsIntro() {
 
   header.append(title, stageLabel);
   main.append(recipeIcon, description);
-  const voiceActivation = createVoiceActivationCard("Turn on voice here if you want to say \"next\" during active preparation and cooking steps. Intro screens still advance by tap.");
-  if (voiceActivation) {
-    main.appendChild(voiceActivation);
+
+  const voicePanel = document.createElement("button");
+  voicePanel.type = "button";
+  voicePanel.className = "intro-voice-panel";
+  if (isVoiceReady()) {
+    voicePanel.classList.add("is-on");
   }
-  footer.appendChild(createStageActionRow(
+  voicePanel.addEventListener("click", () => {
+    if (isVoiceReady()) {
+      disableMinimalVoicePreference();
+      return;
+    }
+    requestMinimalVoiceActivation();
+  });
+
+  const voiceIcon = document.createElement("i");
+  voiceIcon.className = `fa-solid ${isVoiceReady() ? "fa-microphone" : "fa-microphone-slash"} intro-voice-panel__icon`;
+  voiceIcon.setAttribute("aria-hidden", "true");
+
+  const voiceLabel = document.createElement("span");
+  voiceLabel.className = "intro-voice-panel__label";
+  voiceLabel.textContent = isVoiceReady() ? "Voice Commands Enabled" : "Enable Voice Commands";
+
+  voicePanel.append(voiceIcon, voiceLabel);
+
+  if (isVoiceReady()) {
+    const stopLabel = document.createElement("span");
+    stopLabel.className = "intro-voice-panel__stop";
+    stopLabel.textContent = "Stop";
+    voicePanel.appendChild(stopLabel);
+  }
+
+  const actionRow = createStageActionRow(
     {
       onClick: () => setScreen("analysis")
     },
     {
       onClick: () => runProgressionNextAction("ingredientsIntro", "click")
     }
-  ));
+  );
+
+  footer.append(voicePanel, actionRow);
 }
 
 function renderPreparationIntro() {
@@ -5664,18 +5694,48 @@ function renderPreparationIntro() {
 
   header.append(title, stageLabel);
   main.append(recipeIcon, description);
-  const voiceActivation = createVoiceActivationCard("Turn on voice here if you want to say \"next\" during active preparation and cooking steps. Intro screens still advance by tap.");
-  if (voiceActivation) {
-    main.appendChild(voiceActivation);
+
+  const voicePanel = document.createElement("button");
+  voicePanel.type = "button";
+  voicePanel.className = "intro-voice-panel";
+  if (isVoiceReady()) {
+    voicePanel.classList.add("is-on");
   }
-  footer.appendChild(createStageActionRow(
+  voicePanel.addEventListener("click", () => {
+    if (isVoiceReady()) {
+      disableMinimalVoicePreference();
+      return;
+    }
+    requestMinimalVoiceActivation();
+  });
+
+  const voiceIcon = document.createElement("i");
+  voiceIcon.className = `fa-solid ${isVoiceReady() ? "fa-microphone" : "fa-microphone-slash"} intro-voice-panel__icon`;
+  voiceIcon.setAttribute("aria-hidden", "true");
+
+  const voiceLabel = document.createElement("span");
+  voiceLabel.className = "intro-voice-panel__label";
+  voiceLabel.textContent = isVoiceReady() ? "Voice Commands Enabled" : "Enable Voice Commands";
+
+  voicePanel.append(voiceIcon, voiceLabel);
+
+  if (isVoiceReady()) {
+    const stopLabel = document.createElement("span");
+    stopLabel.className = "intro-voice-panel__stop";
+    stopLabel.textContent = "Stop";
+    voicePanel.appendChild(stopLabel);
+  }
+
+  const actionRow = createStageActionRow(
     {
       onClick: () => setScreen("ingredients")
     },
     {
       onClick: () => runProgressionNextAction("preparationIntro", "click")
     }
-  ));
+  );
+
+  footer.append(voicePanel, actionRow);
 }
 
 function renderCookingIntro() {
@@ -5693,18 +5753,48 @@ function renderCookingIntro() {
 
   header.append(title, stageLabel);
   main.append(recipeIcon);
-  const voiceActivation = createVoiceActivationCard("Turn on voice here if you want to say \"next\" during active preparation and cooking steps. Intro screens still advance by tap.");
-  if (voiceActivation) {
-    main.appendChild(voiceActivation);
+
+  const voicePanel = document.createElement("button");
+  voicePanel.type = "button";
+  voicePanel.className = "intro-voice-panel";
+  if (isVoiceReady()) {
+    voicePanel.classList.add("is-on");
   }
-  footer.appendChild(createStageActionRow(
+  voicePanel.addEventListener("click", () => {
+    if (isVoiceReady()) {
+      disableMinimalVoicePreference();
+      return;
+    }
+    requestMinimalVoiceActivation();
+  });
+
+  const voiceIcon = document.createElement("i");
+  voiceIcon.className = `fa-solid ${isVoiceReady() ? "fa-microphone" : "fa-microphone-slash"} intro-voice-panel__icon`;
+  voiceIcon.setAttribute("aria-hidden", "true");
+
+  const voiceLabel = document.createElement("span");
+  voiceLabel.className = "intro-voice-panel__label";
+  voiceLabel.textContent = isVoiceReady() ? "Voice Commands Enabled" : "Enable Voice Commands";
+
+  voicePanel.append(voiceIcon, voiceLabel);
+
+  if (isVoiceReady()) {
+    const stopLabel = document.createElement("span");
+    stopLabel.className = "intro-voice-panel__stop";
+    stopLabel.textContent = "Stop";
+    voicePanel.appendChild(stopLabel);
+  }
+
+  const actionRow = createStageActionRow(
     {
       onClick: () => openPreparationIntro()
     },
     {
       onClick: () => runProgressionNextAction("cookingIntro", "click")
     }
-  ));
+  );
+
+  footer.append(voicePanel, actionRow);
 }
 
 function renderIngredients(options = {}) {
@@ -5720,10 +5810,33 @@ function renderIngredients(options = {}) {
   }
 
   const { content, footer } = createTitledPage("Ingredient Check", "Verify ingredients before you begin");
-  const voiceIndicator = createVoiceIndicatorBar("ingredients");
-  if (voiceIndicator) {
-    content.appendChild(voiceIndicator);
+  const voiceBar = document.createElement("div");
+  voiceBar.className = "active-voice-bar";
+  const voiceWave = document.createElement("div");
+  voiceWave.className = "active-voice-bar__wave";
+  voiceWave.setAttribute("aria-hidden", "true");
+  for (let i = 0; i < 5; i += 1) {
+    const bar = document.createElement("span");
+    bar.className = "active-voice-bar__wave-bar";
+    voiceWave.appendChild(bar);
   }
+  const voiceText = document.createElement("span");
+  voiceText.className = "active-voice-bar__text";
+  if (appState.voiceStatus === "unavailable" && appState.voiceErrorMessage) {
+    voiceBar.classList.add("is-error");
+    voiceText.textContent = "Voice input not available right now";
+  } else if (isVoiceReady()) {
+    voiceBar.classList.add("is-active");
+    if (appState.voiceUserSpeaking) {
+      voiceBar.classList.add("is-listening");
+      voiceText.textContent = "Listening";
+    }
+  } else {
+    voiceBar.classList.add("is-off");
+    voiceText.textContent = "Voice off";
+  }
+  voiceBar.append(voiceWave, voiceText);
+  content.appendChild(voiceBar);
 
   const card = createCard();
   const list = document.createElement("ul");
@@ -5810,10 +5923,33 @@ function renderPreparation() {
   const currentText = appState.recipe.preparationSteps[idx];
 
   const { content, footer } = createTitledPage("Preparation", `Preparation ${idx + 1} of ${total}`, "page-shell--guided preparation-screen");
-  const voiceIndicator = createVoiceIndicatorBar("preparation");
-  if (voiceIndicator) {
-    content.appendChild(voiceIndicator);
+  const voiceBar = document.createElement("div");
+  voiceBar.className = "active-voice-bar";
+  const voiceWave = document.createElement("div");
+  voiceWave.className = "active-voice-bar__wave";
+  voiceWave.setAttribute("aria-hidden", "true");
+  for (let i = 0; i < 5; i += 1) {
+    const bar = document.createElement("span");
+    bar.className = "active-voice-bar__wave-bar";
+    voiceWave.appendChild(bar);
   }
+  const voiceText = document.createElement("span");
+  voiceText.className = "active-voice-bar__text";
+  if (appState.voiceStatus === "unavailable" && appState.voiceErrorMessage) {
+    voiceBar.classList.add("is-error");
+    voiceText.textContent = "Voice input not available right now";
+  } else if (isVoiceReady()) {
+    voiceBar.classList.add("is-active");
+    if (appState.voiceUserSpeaking) {
+      voiceBar.classList.add("is-listening");
+      voiceText.textContent = "Listening";
+    }
+  } else {
+    voiceBar.classList.add("is-off");
+    voiceText.textContent = "Voice off";
+  }
+  voiceBar.append(voiceWave, voiceText);
+  content.appendChild(voiceBar);
   content.appendChild(createScrollableStepPanel(
     appState.recipe.preparationSteps.map((stepText) => ({ text: stepText })),
     idx,
@@ -6034,10 +6170,33 @@ function renderCooking() {
   top.append(recipeName, stepMeta);
   header.appendChild(top);
 
-  const voiceIndicator = createVoiceIndicatorBar("cooking");
-  if (voiceIndicator) {
-    content.appendChild(voiceIndicator);
+  const voiceBar = document.createElement("div");
+  voiceBar.className = "active-voice-bar";
+  const voiceWave = document.createElement("div");
+  voiceWave.className = "active-voice-bar__wave";
+  voiceWave.setAttribute("aria-hidden", "true");
+  for (let i = 0; i < 5; i += 1) {
+    const bar = document.createElement("span");
+    bar.className = "active-voice-bar__wave-bar";
+    voiceWave.appendChild(bar);
   }
+  const voiceText = document.createElement("span");
+  voiceText.className = "active-voice-bar__text";
+  if (appState.voiceStatus === "unavailable" && appState.voiceErrorMessage) {
+    voiceBar.classList.add("is-error");
+    voiceText.textContent = "Voice input not available right now";
+  } else if (isVoiceReady()) {
+    voiceBar.classList.add("is-active");
+    if (appState.voiceUserSpeaking) {
+      voiceBar.classList.add("is-listening");
+      voiceText.textContent = "Listening";
+    }
+  } else {
+    voiceBar.classList.add("is-off");
+    voiceText.textContent = "Voice off";
+  }
+  voiceBar.append(voiceWave, voiceText);
+  content.appendChild(voiceBar);
 
   if (hasTimer) {
     ensureCurrentStepTimerStarted();
