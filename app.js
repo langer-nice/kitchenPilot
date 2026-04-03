@@ -244,7 +244,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v107"; 
+const BUILD_VERSION = "DEV BUILD: v108"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -1301,6 +1301,10 @@ function clearMinimalVoiceTranscriptState() {
 }
 
 function isMinimalVoiceNextAvailable() {
+  if (appState.currentScreen === "ingredients") {
+    return true;
+  }
+
   if (appState.currentScreen === "preparation") {
     return true;
   }
@@ -1330,7 +1334,9 @@ function executeMinimalVoiceNext() {
   appState.voiceLastMatchedCommand = "next";
   appState.voiceLastAction = "next";
 
-  if (appState.currentScreen === "preparation") {
+  if (appState.currentScreen === "ingredients") {
+    openPreparationIntro();
+  } else if (appState.currentScreen === "preparation") {
     advancePreparationStep();
   } else if (appState.currentScreen === "cooking") {
     goToNextCookingStep();
@@ -1646,6 +1652,9 @@ function isGuidanceScreen(screenName) {
 }
 
 function getVoiceScreenMode(screenName = appState.currentScreen) {
+  if (screenName === "ingredients") {
+    return "ingredients";
+  }
   if (screenName === "preparation") {
     return "preparation";
   }
@@ -1656,7 +1665,9 @@ function getVoiceScreenMode(screenName = appState.currentScreen) {
 }
 
 function isMinimalVoiceScreen(screenName = appState.currentScreen) {
-  return screenName === "preparation" || screenName === "cooking";
+  return screenName === "ingredients" ||
+    screenName === "preparation" ||
+    screenName === "cooking";
 }
 
 function isMinimalVoiceAvailableOnScreen(screenName = appState.currentScreen) {
