@@ -1362,6 +1362,57 @@ button.danger,
   margin-top: 12px;
 }
 
+.voice-activation-panel {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+}
+
+.voice-activation-title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.voice-activation-copy {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.voice-activation-status {
+  margin: 0;
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.voice-activation-status[data-state="ready"] {
+  color: #145f32;
+}
+
+.voice-activation-status[data-state="requesting"] {
+  color: #0e3e89;
+}
+
+.voice-activation-status[data-state="unavailable"] {
+  color: var(--color-danger);
+}
+
+.voice-activation-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.voice-activation-actions button {
+  flex: 1 1 0;
+}
+
 .voice-modal-overlay {
   position: fixed;
   inset: 0;

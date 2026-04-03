@@ -16,6 +16,7 @@ const appState = {
   activeTimerSeconds: null,
   timerPaused: false,
   voiceEnabled: false,
+  voiceStatus: "off",
   headerMenuOpen: false,
   voiceUnlocked: false,
   voiceListening: false,
@@ -147,6 +148,19 @@ function isTimerOverlayActive() {
     appState.activeTimerSeconds >= 0 &&
     (appState.timerStatus === "running" || appState.timerStatus === "paused")
   );
+}
+
+function isMinimalVoiceSupported() {
+  return Boolean(
+    MINIMAL_VOICE_PHASE1_ENABLED &&
+    MinimalSpeechRecognition &&
+    navigator.mediaDevices &&
+    typeof navigator.mediaDevices.getUserMedia === "function"
+  );
+}
+
+function isVoiceReady() {
+  return Boolean(appState.voiceEnabled && appState.voiceStatus === "ready");
 }
 
 const VOICE_SYSTEM_ENABLED = false;
@@ -922,11 +936,10 @@ function restoreCookingVoiceAfterTimerFinish(reason = "timer-finished", payload 
 
   if (
     appState.currentScreen === "cooking" &&
-    appState.voiceEnabled &&
-    isVoiceRecognitionAllowedOnScreen("cooking") &&
+    shouldListenForMinimalVoiceCommands("cooking") &&
     !appState.voiceListening
   ) {
-    startVoiceCommands();
+    startMinimalVoiceController();
   }
 }
 
@@ -952,12 +965,10 @@ function ensureCookingVoiceReady(reason = "step-enter", payload = {}) {
 
   if (
     appState.currentScreen === "cooking" &&
-    appState.voiceEnabled &&
-    isVoiceRecognitionAllowedOnScreen("cooking") &&
-    !appState.voiceOutputSpeaking &&
+    shouldListenForMinimalVoiceCommands("cooking") &&
     !appState.voiceListening
   ) {
-    startVoiceCommands();
+    startMinimalVoiceController();
   }
 }
 
@@ -1195,11 +1206,27 @@ function isVoiceUiActive() {
 }
 
 function isVoiceRecognitionAllowedOnScreen(screenName = appState.currentScreen) {
-  return isMinimalVoiceAvailableOnScreen(screenName);
+  return isMinimalVoiceScreen(screenName);
+}
+
+function shouldListenForMinimalVoiceCommands(screenName = appState.currentScreen) {
+  return Boolean(
+    isMinimalVoiceScreen(screenName) &&
+    isVoiceReady() &&
+    !appState.voiceOutputSpeaking
+  );
+}
+
+function syncMinimalVoiceController() {
+  if (shouldListenForMinimalVoiceCommands(appState.currentScreen)) {
+    startMinimalVoiceController();
+    return;
+  }
+  stopMinimalVoiceController();
 }
 
 function syncVoiceIndicatorBars() {
-  const stateClass = !appState.voiceEnabled || !isVoiceRecognitionAllowedOnScreen()
+  const stateClass = !isVoiceReady() || !isVoiceRecognitionAllowedOnScreen()
     ? "voice-off"
     : isVoiceUiActive()
       ? "voice-active"
@@ -1313,14 +1340,26 @@ function executeMinimalVoiceNext() {
 }
 
 function startMinimalVoiceController() {
-  if (!isMinimalVoiceAvailableOnScreen(appState.currentScreen)) {
+  if (!shouldListenForMinimalVoiceCommands(appState.currentScreen)) {
     return;
   }
 
-  appState.voiceEnabled = true;
-  appState.voiceUnlocked = true;
-  appState.voiceErrorMessage = "";
-  appState.voiceListening = false;
+  if (!isVoiceReady()) {
+    appState.voiceListening = false;
+    clearMinimalVoiceTranscriptState();
+    renderCurrentVoiceScreen();
+    return;
+  }
+
+  if (!minimalVoiceRecognition && !MinimalSpeechRecognition) {
+    appState.voiceStatus = "unavailable";
+    appState.voiceEnabled = false;
+    appState.voiceUnlocked = false;
+    appState.voiceErrorMessage = "Voice input is not supported in this browser.";
+    renderCurrentVoiceScreen();
+    return;
+  }
+
   clearVoiceRecognitionActivity();
   clearMinimalVoiceTranscriptState();
 
@@ -1332,6 +1371,7 @@ function startMinimalVoiceController() {
 
     minimalVoiceRecognition.onstart = () => {
       appState.voiceListening = true;
+      appState.voiceRecognitionSessionId += 1;
       clearVoiceRecognitionActivity();
       setVoiceCommandStatus("", 0);
       renderCurrentVoiceScreen();
@@ -1340,7 +1380,7 @@ function startMinimalVoiceController() {
     minimalVoiceRecognition.onresult = (event) => {
       const result = event.results?.[event.resultIndex];
       const transcript = (result?.[0]?.transcript || "").trim();
-      if (!transcript || !isMinimalVoiceScreen(appState.currentScreen)) {
+      if (!transcript || !shouldListenForMinimalVoiceCommands(appState.currentScreen)) {
         clearMinimalVoiceTranscriptState();
         return;
       }
@@ -1351,6 +1391,20 @@ function startMinimalVoiceController() {
       appState.voiceLastTranscriptAt = getVoiceTimestamp();
 
       if (normalizedTranscript.includes("next")) {
+        const commandKey = `${appState.currentScreen}:${appState.voiceRecognitionSessionId}:${normalizedTranscript}`;
+        if (lastVoiceHandledCommand.key === commandKey) {
+          return;
+        }
+        lastVoiceHandledCommand = {
+          key: commandKey,
+          transcript,
+          at: getVoiceTimestamp()
+        };
+        try {
+          minimalVoiceRecognition.abort();
+        } catch {
+          // Ignore abort errors when recognition is already stopping.
+        }
         executeMinimalVoiceNext();
         return;
       }
@@ -1373,14 +1427,35 @@ function startMinimalVoiceController() {
       appState.voiceListening = false;
       clearVoiceRecognitionActivity();
       clearMinimalVoiceTranscriptState();
+      if (shouldListenForMinimalVoiceCommands(appState.currentScreen)) {
+        window.setTimeout(() => {
+          if (shouldListenForMinimalVoiceCommands(appState.currentScreen) && !appState.voiceListening) {
+            startMinimalVoiceController();
+          }
+        }, 0);
+        return;
+      }
       renderCurrentVoiceScreen();
     };
 
-    minimalVoiceRecognition.onerror = () => {
+    minimalVoiceRecognition.onerror = (event) => {
       appState.voiceListening = false;
       clearVoiceRecognitionActivity();
       clearMinimalVoiceTranscriptState();
-      appState.voiceErrorMessage = "Voice input is unavailable right now.";
+      const code = event && event.error ? String(event.error) : "";
+      if (code === "not-allowed" || code === "service-not-allowed") {
+        appState.voiceStatus = "unavailable";
+        appState.voiceEnabled = false;
+        appState.voiceUnlocked = false;
+        appState.voiceErrorMessage = "Microphone permission denied. Enable microphone access and try again.";
+      } else if (code === "audio-capture") {
+        appState.voiceStatus = "unavailable";
+        appState.voiceEnabled = false;
+        appState.voiceUnlocked = false;
+        appState.voiceErrorMessage = "No microphone was found. Connect a microphone and try again.";
+      } else {
+        appState.voiceErrorMessage = "Voice input is unavailable right now.";
+      }
       renderCurrentVoiceScreen();
     };
   }
@@ -1395,7 +1470,6 @@ function startMinimalVoiceController() {
 
 function stopMinimalVoiceController() {
   appState.voiceListening = false;
-  appState.voiceEnabled = isMinimalVoiceAvailableOnScreen(appState.currentScreen);
   clearVoiceRecognitionActivity();
   clearMinimalVoiceTranscriptState();
 
@@ -1586,7 +1660,10 @@ function isMinimalVoiceScreen(screenName = appState.currentScreen) {
 }
 
 function isMinimalVoiceAvailableOnScreen(screenName = appState.currentScreen) {
-  return Boolean(MINIMAL_VOICE_PHASE1_ENABLED && MinimalSpeechRecognition && isMinimalVoiceScreen(screenName));
+  return Boolean(
+    isMinimalVoiceSupported() &&
+    (isMinimalVoiceScreen(screenName) || isIntroScreen(screenName))
+  );
 }
 
 function isIntroScreen(screenName = appState.currentScreen) {
@@ -1870,8 +1947,6 @@ function getRecipeMetadataDebugSnapshot(recipe) {
 
 function setScreen(screenName) {
   const previousScreen = appState.currentScreen;
-  const previousWasMinimalVoiceScreen = isMinimalVoiceScreen(previousScreen);
-  const nextIsMinimalVoiceScreen = isMinimalVoiceScreen(screenName);
   const previousScreenEnteredAt = appState.voiceScreenEnteredAt;
   const timerBefore = getVoiceTimerSnapshot();
   const enteredAt = getVoiceTimestamp();
@@ -1901,9 +1976,6 @@ function setScreen(screenName) {
   }
 
   appState.currentScreen = screenName;
-  appState.voiceEnabled = isMinimalVoiceAvailableOnScreen(screenName);
-  appState.voiceUnlocked = appState.voiceEnabled;
-  appState.voiceErrorMessage = "";
   appState.voiceScreenEnteredAt = enteredAt;
   appState.voiceLastTranscript = "";
   appState.voiceLastMatchedCommand = "";
@@ -2048,11 +2120,10 @@ function setScreen(screenName) {
     appState.timerPaused = false;
     appState.lastSpokenPreparationIndex = null;
     appState.lastSpokenCookingIndex = null;
-    stopVoiceCommands();
     stopMinimalVoiceController();
     stopTimer();
-  } else if (appState.voiceEnabled && !isVoiceRecognitionAllowedOnScreen(screenName)) {
-    suspendVoiceRecognitionForCurrentScreen("intro-click-only-screen");
+  } else if (!shouldListenForMinimalVoiceCommands(screenName)) {
+    stopMinimalVoiceController();
   }
 
   switch (screenName) {
@@ -2106,23 +2177,7 @@ function setScreen(screenName) {
       renderHome();
   }
 
-  if (VOICE_SYSTEM_ENABLED && appState.voiceEnabled && isVoiceRecognitionAllowedOnScreen(screenName) && !appState.voiceListening) {
-    startVoiceCommands();
-  }
-
-  if (previousWasMinimalVoiceScreen && previousScreen !== screenName) {
-    stopMinimalVoiceController();
-  }
-
-  if (nextIsMinimalVoiceScreen) {
-    startMinimalVoiceController();
-  } else {
-    appState.voiceEnabled = false;
-    appState.voiceUnlocked = false;
-    appState.voiceListening = false;
-    clearVoiceRecognitionActivity();
-    clearMinimalVoiceTranscriptState();
-  }
+  syncMinimalVoiceController();
 
   updateTimerOverlay();
 }
@@ -2498,125 +2553,131 @@ function findIngredientIndexFromVoice(commandText) {
   });
 }
 
-function createVoiceActivationCard(enableMessage) {
-  const voiceAvailableOnScreen = isMinimalVoiceAvailableOnScreen();
-  const voiceCard = createCard();
-  voiceCard.classList.add("voice-card");
-
-  const voiceTitle = document.createElement("p");
-  voiceTitle.className = "voice-card-text";
-  voiceTitle.textContent = enableMessage;
-
-  const row = document.createElement("div");
-  row.className = "voice-row";
-
-  const voiceState = document.createElement("p");
-  voiceState.className = "voice-row-label";
-  voiceState.textContent = "Voice commands";
-
-  const voiceSwitchLabel = document.createElement("label");
-  voiceSwitchLabel.className = "mic-switch";
-  if (appState.voiceListening && voiceAvailableOnScreen) {
-    voiceSwitchLabel.classList.add("listening");
+async function requestMinimalVoiceActivation() {
+  if (appState.voiceStatus === "requesting") {
+    return;
   }
-  voiceSwitchLabel.setAttribute("aria-label", "Toggle voice commands");
 
-  const voiceToggleInput = document.createElement("input");
-  voiceToggleInput.type = "checkbox";
-  voiceToggleInput.checked = appState.voiceEnabled && voiceAvailableOnScreen;
-  voiceToggleInput.disabled = true;
-  voiceToggleInput.addEventListener("click", (event) => {
-    event.preventDefault();
+  if (!isMinimalVoiceSupported()) {
+    appState.voiceEnabled = false;
+    appState.voiceUnlocked = false;
+    appState.voiceStatus = "unavailable";
+    appState.voiceErrorMessage = "Voice input is not supported in this browser.";
+    renderCurrentVoiceScreen();
+    return;
+  }
+
+  appState.voiceStatus = "requesting";
+  appState.voiceErrorMessage = "";
+  renderCurrentVoiceScreen();
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((track) => track.stop());
+    appState.voiceEnabled = true;
+    appState.voiceUnlocked = true;
+    appState.voiceStatus = "ready";
+    appState.voiceErrorMessage = "";
+  } catch (error) {
+    const code = error && error.name ? String(error.name) : "";
+    appState.voiceEnabled = false;
+    appState.voiceUnlocked = false;
+    appState.voiceStatus = "unavailable";
+    if (code === "NotAllowedError" || code === "PermissionDeniedError") {
+      appState.voiceErrorMessage = "Microphone permission denied. Enable microphone access and try again.";
+    } else if (code === "NotFoundError" || code === "DevicesNotFoundError") {
+      appState.voiceErrorMessage = "No microphone was found. Connect a microphone and try again.";
+    } else {
+      appState.voiceErrorMessage = "Voice input is unavailable right now.";
+    }
+  }
+
+  renderCurrentVoiceScreen();
+  syncMinimalVoiceController();
+}
+
+function disableMinimalVoicePreference() {
+  appState.voiceEnabled = false;
+  appState.voiceUnlocked = false;
+  appState.voiceStatus = "off";
+  appState.voiceErrorMessage = "";
+  stopMinimalVoiceController();
+  renderCurrentVoiceScreen();
+}
+
+function getVoiceActivationMessage(enableMessage) {
+  if (!isMinimalVoiceSupported()) {
+    return "Voice is unavailable on this device.";
+  }
+  if (appState.voiceStatus === "requesting") {
+    return "Requesting microphone permission...";
+  }
+  if (appState.voiceStatus === "ready") {
+    return "Voice ready. You can say \"next\" on active preparation and cooking steps.";
+  }
+  if (appState.voiceStatus === "unavailable") {
+    return appState.voiceErrorMessage || "Voice is unavailable right now.";
+  }
+  return enableMessage;
+}
+
+function createVoiceActivationCard(enableMessage) {
+  const voiceCard = createCard();
+  voiceCard.classList.add("voice-activation-panel");
+
+  const title = document.createElement("h2");
+  title.className = "voice-activation-title";
+  title.textContent = "Enable Voice";
+
+  const description = document.createElement("p");
+  description.className = "voice-activation-copy";
+  description.textContent = getVoiceActivationMessage(enableMessage);
+
+  const status = document.createElement("p");
+  status.className = "voice-activation-status";
+  if (appState.voiceStatus === "ready") {
+    status.textContent = "Voice ready";
+    status.dataset.state = "ready";
+  } else if (appState.voiceStatus === "requesting") {
+    status.textContent = "Requesting permission";
+    status.dataset.state = "requesting";
+  } else if (appState.voiceStatus === "unavailable") {
+    status.textContent = "Voice unavailable";
+    status.dataset.state = "unavailable";
+  } else {
+    status.textContent = "Tap to enable microphone access";
+    status.dataset.state = "off";
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "voice-activation-actions";
+
+  const enableLabel = appState.voiceStatus === "ready"
+    ? "Voice Ready"
+    : appState.voiceStatus === "requesting"
+      ? "Enabling..."
+      : "Enable Voice";
+
+  const enableButton = createButton(enableLabel, "primary", () => {
+    requestMinimalVoiceActivation();
   });
+  enableButton.disabled = appState.voiceStatus === "requesting" || appState.voiceStatus === "ready";
 
-  const slider = document.createElement("span");
-  slider.className = "slider";
+  const notNowButton = createButton("Not now", "secondary", () => {
+    disableMinimalVoicePreference();
+  });
+  notNowButton.disabled = appState.voiceStatus === "requesting";
 
-  voiceSwitchLabel.append(voiceToggleInput, slider);
-  row.append(voiceState, voiceSwitchLabel);
-  voiceCard.append(voiceTitle, row);
+  actions.append(enableButton, notNowButton);
+  voiceCard.append(title, description, status, actions);
   appendVoiceError(voiceCard);
   return voiceCard;
 }
 
 function createCompactVoiceStrip(options = {}) {
-  const voiceAvailableOnScreen = isMinimalVoiceAvailableOnScreen();
-  const {
-    hintMessage = "Voice commands enabled. Say: Next, Repeat, Pause.",
-    hintMs = 2200,
-    showListeningText = false,
-    animateListening = false,
-    showUnlockButton = false,
-    unlockLabel = "Unlock Voice",
-    readyLabel = "Voice ready"
-  } = options;
-
-  const voiceRow = document.createElement("div");
-  voiceRow.className = "header-row row-2 voice-panel compact-voice";
-  if (appState.voiceEnabled && voiceAvailableOnScreen) {
-    voiceRow.classList.add("voice-active");
-  } else {
-    voiceRow.classList.add("voice-off", "voice-panel--cta");
-  }
-  if (!animateListening) {
-    voiceRow.classList.add("voice-panel--static");
-  }
-
-  const voiceLabel = document.createElement("p");
-  voiceLabel.className = "meta voice-label";
-
-  const voiceIcon = document.createElement("i");
-  voiceIcon.className = "fa-solid fa-microphone voice-icon";
-  voiceIcon.setAttribute("aria-hidden", "true");
-
-  const voiceText = document.createElement("span");
-  voiceText.textContent = !voiceAvailableOnScreen
-    ? "Voice unavailable on this screen"
-    : appState.voiceEnabled
-    ? (showListeningText && appState.voiceListening ? "Voice listening" : "Voice")
-    : "Enable voice control";
-  voiceLabel.append(voiceIcon, voiceText);
-
-  const enableVoiceFromPanel = () => {
-    return;
-  };
-
-  const voiceSwitchLabel = document.createElement("label");
-  voiceSwitchLabel.className = "mic-switch";
-  if (animateListening && appState.voiceListening && voiceAvailableOnScreen) {
-    voiceSwitchLabel.classList.add("listening");
-  }
-  voiceSwitchLabel.setAttribute("aria-label", "Toggle voice commands");
-
-  const voiceToggleInput = document.createElement("input");
-  voiceToggleInput.type = "checkbox";
-  voiceToggleInput.checked = appState.voiceEnabled && voiceAvailableOnScreen;
-  voiceToggleInput.disabled = true;
-  voiceToggleInput.addEventListener("click", (event) => {
-    event.preventDefault();
-  });
-  voiceSwitchLabel.addEventListener("click", (event) => {
-    event.stopPropagation();
-  });
-
-  const slider = document.createElement("span");
-  slider.className = "slider";
-  voiceSwitchLabel.append(voiceToggleInput, slider);
-
-  const controls = document.createElement("div");
-  controls.className = "voice-strip-controls";
-  controls.appendChild(voiceSwitchLabel);
-
-  if (showUnlockButton && appState.voiceUnlocked) {
-    const readyState = document.createElement("span");
-    readyState.className = "voice-ready-badge";
-    readyState.textContent = readyLabel;
-    controls.appendChild(readyState);
-  }
-
-  voiceRow.append(voiceLabel, controls);
-
-  return voiceRow;
+  return createVoiceActivationCard(
+    options.hintMessage || "Use voice if you want to say \"next\" during active steps."
+  );
 }
 
 function unlockVoiceAssistant(options = {}) {
@@ -3993,9 +4054,17 @@ function createVoiceIndicatorBar(targetScreen) {
   trigger.type = "button";
   trigger.className = "voice-indicator-bar";
   const voiceAvailableOnScreen = isMinimalVoiceAvailableOnScreen(targetScreen);
-  const voiceStateClass = !appState.voiceEnabled || !voiceAvailableOnScreen ? "voice-off" : isVoiceUiActive() ? "voice-active" : "voice-idle";
+  const voiceReady = isVoiceReady() && isVoiceRecognitionAllowedOnScreen(targetScreen);
+  const voiceStateClass = !voiceReady ? "voice-off" : isVoiceUiActive() ? "voice-active" : "voice-idle";
+  const indicatorLabel = !voiceAvailableOnScreen
+    ? "Voice unavailable on this screen"
+    : voiceReady
+      ? (appState.voiceListening ? "Voice listening" : "Voice ready")
+      : appState.voiceStatus === "unavailable"
+        ? "Voice unavailable"
+        : "Voice off";
   trigger.classList.add(voiceStateClass);
-  trigger.setAttribute("aria-label", !voiceAvailableOnScreen ? "Voice unavailable on this screen" : appState.voiceListening ? "Voice listening" : "Voice ready");
+  trigger.setAttribute("aria-label", indicatorLabel);
   trigger.disabled = true;
 
   const bars = document.createElement("div");
@@ -4008,10 +4077,10 @@ function createVoiceIndicatorBar(targetScreen) {
   }
 
   trigger.appendChild(bars);
-  if (!appState.voiceEnabled || !voiceAvailableOnScreen) {
+  if (!voiceReady || !voiceAvailableOnScreen) {
     const label = document.createElement("span");
     label.className = "voice-indicator-text";
-    label.textContent = voiceAvailableOnScreen ? "Voice ready" : "Voice unavailable";
+    label.textContent = indicatorLabel;
     trigger.appendChild(label);
   }
 
@@ -5440,16 +5509,7 @@ function renderIngredientsIntro() {
 
   header.append(title, stageLabel);
   main.append(recipeIcon, description);
-  main.appendChild(createCompactVoiceStrip({
-    hintMessage: "Voice commands are disabled on this intro. Tap Next to continue.",
-    hintMs: 2200,
-    showListeningText: false,
-    animateListening: false,
-    showUnlockButton: true,
-    unlockLabel: "Unlock Voice",
-    readyLabel: "Voice ready"
-  }));
-  appendVoiceError(main);
+  main.appendChild(createVoiceActivationCard("Turn on voice here if you want to say \"next\" during active preparation and cooking steps. Intro screens still advance by tap."));
   footer.appendChild(createStageActionRow(
     {
       onClick: () => setScreen("analysis")
@@ -5493,7 +5553,7 @@ function renderPreparationIntro() {
 
   header.append(title, stageLabel);
   main.append(recipeIcon, description);
-  main.appendChild(createVoiceActivationCard("Voice commands are disabled on this intro. Tap Next to continue."));
+  main.appendChild(createVoiceActivationCard("Turn on voice here if you want to say \"next\" during active preparation and cooking steps. Intro screens still advance by tap."));
   footer.appendChild(createStageActionRow(
     {
       onClick: () => setScreen("ingredients")
@@ -5533,11 +5593,7 @@ function renderCookingIntro() {
 
   header.append(title, stageLabel);
   main.append(recipeIcon);
-  main.appendChild(createVoiceActivationCard(
-    INTRO_SCREENS_CLICK_ONLY_DEBUG
-      ? "Voice commands are disabled on this intro. Tap Next to continue."
-      : "Voice enabled. You can say: Next, Repeat, Pause."
-  ));
+  main.appendChild(createVoiceActivationCard("Turn on voice here if you want to say \"next\" during active preparation and cooking steps. Intro screens still advance by tap."));
   footer.appendChild(createStageActionRow(
     {
       onClick: () => openPreparationIntro()
@@ -6112,6 +6168,7 @@ window.addEventListener("kitchenpilot:voice-speech-start", () => {
     });
   }
   setVoiceOutputSpeaking(true);
+  stopMinimalVoiceController();
   if (appState.currentScreen === "cooking") {
     recordCookingVoicePanelState("speech-start", {
       cookingIndex: appState.cookingIndex,
@@ -6144,6 +6201,7 @@ window.addEventListener("kitchenpilot:voice-speech-end", () => {
     });
     return;
   }
+  syncMinimalVoiceController();
   if (appState.currentScreen === "cooking") {
     recordCookingVoicePanelState("speech-end", {
       cookingIndex: appState.cookingIndex,
