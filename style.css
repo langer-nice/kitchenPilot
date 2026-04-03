@@ -1680,10 +1680,12 @@ button.ghost-action:hover,
 }
 
 .timer-overlay {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
   width: 100%;
-  background: rgba(0, 0, 0, 0.92);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  flex-shrink: 0;
+  z-index: 25;
 }
 
 .timer-overlay.hidden {
@@ -1692,16 +1694,17 @@ button.ghost-action:hover,
 
 .timer-utility-panel {
   width: 100%;
-  max-width: 100%;
+  max-width: none;
   margin: 0;
-  background: transparent;
+  background: rgba(0, 0, 0, 0.94);
   color: #ffffff;
-  border-radius: 0;
+  border-radius: 16px 16px 0 0;
   padding: 16px var(--page-gutter) calc(16px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   gap: 14px;
   overflow: hidden;
+  box-shadow: none;
 }
 
 .timer-utility-display {
@@ -1731,7 +1734,7 @@ button.ghost-action:hover,
 
 .timer-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   align-items: stretch;
   gap: 12px;
   width: 100%;
@@ -1745,10 +1748,8 @@ button.ghost-action:hover,
   padding: 0 12px;
 }
 
-@media (max-width: 360px) {
-  .timer-actions {
-    grid-template-columns: 1fr;
-  }
+.page-footer:has(.timer-overlay:not(.hidden)) .action-bar {
+  padding-bottom: calc(164px + env(safe-area-inset-bottom));
 }
 
 .preparation-actions button {
