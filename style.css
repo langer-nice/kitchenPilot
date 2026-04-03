@@ -1367,25 +1367,39 @@ button.danger,
   max-width: 420px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.72);
   text-align: left;
+}
+
+.voice-activation-panel--ready,
+.voice-activation-panel--requesting,
+.voice-activation-panel--unavailable {
+  gap: 8px;
 }
 
 .voice-activation-title {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.95rem;
 }
 
 .voice-activation-copy {
   margin: 0;
   color: var(--muted);
-  font-size: 0.95rem;
-  line-height: 1.45;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.voice-activation-copy--compact {
+  font-size: 0.84rem;
 }
 
 .voice-activation-status {
   margin: 0;
-  font-size: 0.84rem;
+  font-size: 0.74rem;
   font-weight: 700;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -1411,6 +1425,22 @@ button.danger,
 
 .voice-activation-actions button {
   flex: 1 1 0;
+  min-height: 44px;
+}
+
+.voice-ready-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.voice-activation-turn-off {
+  width: auto;
+  min-height: 36px;
+  padding: 8px 12px;
+  font-size: 0.84rem;
+  flex: 0 0 auto;
 }
 
 .voice-modal-overlay {

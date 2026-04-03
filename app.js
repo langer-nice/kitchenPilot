@@ -244,7 +244,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v106"; 
+const BUILD_VERSION = "DEV BUILD: v107"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -2625,6 +2625,78 @@ function createVoiceActivationCard(enableMessage) {
   const voiceCard = createCard();
   voiceCard.classList.add("voice-activation-panel");
 
+  const status = document.createElement("p");
+  status.className = "voice-activation-status";
+
+  if (appState.voiceStatus === "ready") {
+    voiceCard.classList.add("voice-activation-panel--ready");
+
+    const readyRow = document.createElement("div");
+    readyRow.className = "voice-ready-row";
+
+    status.textContent = "Voice ready";
+    status.dataset.state = "ready";
+
+    const description = document.createElement("p");
+    description.className = "voice-activation-copy voice-activation-copy--compact";
+    description.textContent = "You can say \"next\" on active preparation and cooking steps.";
+
+    const turnOffButton = createButton("Turn off", "secondary voice-activation-turn-off", () => {
+      disableMinimalVoicePreference();
+    });
+
+    readyRow.append(status, turnOffButton);
+    voiceCard.append(readyRow, description);
+    appendVoiceError(voiceCard);
+    return voiceCard;
+  }
+
+  if (appState.voiceStatus === "requesting") {
+    voiceCard.classList.add("voice-activation-panel--requesting");
+
+    const title = document.createElement("h2");
+    title.className = "voice-activation-title";
+    title.textContent = "Enabling Voice";
+
+    const description = document.createElement("p");
+    description.className = "voice-activation-copy";
+    description.textContent = getVoiceActivationMessage(enableMessage);
+
+    status.textContent = "Requesting permission";
+    status.dataset.state = "requesting";
+
+    voiceCard.append(title, description, status);
+    appendVoiceError(voiceCard);
+    return voiceCard;
+  }
+
+  if (appState.voiceStatus === "unavailable") {
+    voiceCard.classList.add("voice-activation-panel--unavailable");
+
+    const title = document.createElement("h2");
+    title.className = "voice-activation-title";
+    title.textContent = "Voice unavailable";
+
+    const description = document.createElement("p");
+    description.className = "voice-activation-copy";
+    description.textContent = getVoiceActivationMessage(enableMessage);
+
+    status.textContent = "Permission needed";
+    status.dataset.state = "unavailable";
+
+    const actions = document.createElement("div");
+    actions.className = "voice-activation-actions";
+
+    const retryButton = createButton("Try again", "secondary", () => {
+      requestMinimalVoiceActivation();
+    });
+
+    actions.append(retryButton);
+    voiceCard.append(title, description, status, actions);
+    appendVoiceError(voiceCard);
+    return voiceCard;
+  }
+
   const title = document.createElement("h2");
   title.className = "voice-activation-title";
   title.textContent = "Enable Voice";
@@ -2633,40 +2705,19 @@ function createVoiceActivationCard(enableMessage) {
   description.className = "voice-activation-copy";
   description.textContent = getVoiceActivationMessage(enableMessage);
 
-  const status = document.createElement("p");
-  status.className = "voice-activation-status";
-  if (appState.voiceStatus === "ready") {
-    status.textContent = "Voice ready";
-    status.dataset.state = "ready";
-  } else if (appState.voiceStatus === "requesting") {
-    status.textContent = "Requesting permission";
-    status.dataset.state = "requesting";
-  } else if (appState.voiceStatus === "unavailable") {
-    status.textContent = "Voice unavailable";
-    status.dataset.state = "unavailable";
-  } else {
-    status.textContent = "Tap to enable microphone access";
-    status.dataset.state = "off";
-  }
+  status.textContent = "Optional";
+  status.dataset.state = "off";
 
   const actions = document.createElement("div");
   actions.className = "voice-activation-actions";
 
-  const enableLabel = appState.voiceStatus === "ready"
-    ? "Voice Ready"
-    : appState.voiceStatus === "requesting"
-      ? "Enabling..."
-      : "Enable Voice";
-
-  const enableButton = createButton(enableLabel, "primary", () => {
+  const enableButton = createButton("Enable Voice", "primary", () => {
     requestMinimalVoiceActivation();
   });
-  enableButton.disabled = appState.voiceStatus === "requesting" || appState.voiceStatus === "ready";
 
   const notNowButton = createButton("Not now", "secondary", () => {
     disableMinimalVoicePreference();
   });
-  notNowButton.disabled = appState.voiceStatus === "requesting";
 
   actions.append(enableButton, notNowButton);
   voiceCard.append(title, description, status, actions);
