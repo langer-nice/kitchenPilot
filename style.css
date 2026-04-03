@@ -1696,7 +1696,7 @@ button.ghost-action:hover,
   width: 100%;
   max-width: none;
   margin: 0;
-  background: rgba(0, 0, 0, 0.94);
+  background: rgba(0, 0, 0, 0.9);
   color: #ffffff;
   border-radius: 16px 16px 0 0;
   padding: 16px var(--page-gutter) calc(16px + env(safe-area-inset-bottom));
@@ -1713,8 +1713,8 @@ button.ghost-action:hover,
   gap: 8px;
   width: 100%;
   min-width: 0;
-  margin: 0;
-  font-size: 1.2rem;
+  margin: 0;padding: 2rem 0;
+  font-size: 3rem;
   font-weight: 600;
   color: #ffffff;
   line-height: 1.2;
