@@ -300,7 +300,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v117"; 
+const BUILD_VERSION = "DEV BUILD: v118"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -2637,6 +2637,35 @@ window.extractPrepTasksFromIngredients = extractPrepTasksFromIngredients;
 function initializeIngredientChecklist(recipe) {
   const ingredients = Array.isArray(recipe?.ingredients) ? recipe.ingredients : [];
   appState.ingredientChecks = ingredients.map(() => false);
+}
+
+function resetRecipeSessionState() {
+  stopTimer();
+  appState.recipe = null;
+  appState.ingredientChecks = [];
+  appState.preparationIndex = 0;
+  appState.cookingIndex = 0;
+  appState.timerMessage = "";
+  appState.timerPaused = false;
+  appState.activeTimerSeconds = null;
+  appState.timerSkippedStepIndex = null;
+  appState.cookingVoiceReadyAfterTimerPending = false;
+  appState.lastSpokenPreparationIndex = null;
+  appState.lastSpokenCookingIndex = null;
+  appState.pendingIntroAdvance = null;
+  appState.cookingVoiceConsumedSessionId = 0;
+  appState.cookingVoiceConsumedCommandKey = "";
+  appState.cookingVoiceConsumedTranscript = "";
+  appState.cookingFailureMessage = "";
+  setTimerStatus("idle", "reset recipe session");
+}
+
+function clearHomeRecipeInputState() {
+  appState.homeActiveEntry = null;
+  appState.homeRecipeUrl = "";
+  appState.homeRecipeText = "";
+  appState.homeScreenshotText = "";
+  appState.homeValidationMessage = "";
 }
 
 function setIngredientChecked(index, checked) {
@@ -6571,7 +6600,8 @@ function renderCompleted() {
       alert("Save feature placeholder: recipe would be saved here.");
     }),
     createButton("Return Home", "ghost-action", () => {
-      appState.recipe = null;
+      resetRecipeSessionState();
+      clearHomeRecipeInputState();
       setScreen("home");
     })
   );
