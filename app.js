@@ -300,7 +300,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v118"; 
+const BUILD_VERSION = "DEV BUILD: v119"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -1180,9 +1180,16 @@ function canExecuteCookingVoiceCommand(commandKey) {
       });
     }
     setVoiceHint("Timer is still running. Say skip timer or wait.", 2200);
-    if (appState.currentScreen === "cooking") {
-      safeRenderCooking({ source: "timer-running-rejected" });
-    }
+    recordCookingVoiceDebugEvent("cooking-timer-step-freeze-suspected", {
+      cookingIndex: appState.cookingIndex,
+      timerStatus: appState.timerStatus,
+      activeTimerSeconds: appState.activeTimerSeconds,
+      overlayMounted: Boolean(document.getElementById("timer-overlay")),
+      pauseButtonMounted: Boolean(document.getElementById("timer-pause-btn")),
+      skipButtonMounted: Boolean(document.getElementById("timer-skip-btn")),
+      spokenNextBlocked: true,
+      waitingFor: "timer-complete-or-skip"
+    });
     resetCookingVoiceLiveState("timer-running");
     return false;
   }
@@ -1268,11 +1275,36 @@ function isVoiceRecognitionAllowedOnScreen(screenName = appState.currentScreen) 
   return isMinimalVoiceScreen(screenName);
 }
 
+function isCookingTimerInteractionActive(screenName = appState.currentScreen) {
+  if (screenName !== "cooking") {
+    return false;
+  }
+
+  const step = getCurrentCookingStep();
+  const hasTimer = Boolean(step && Number.isInteger(step.timerSeconds) && step.timerSeconds > 0);
+  return hasTimer && (appState.timerStatus === "running" || appState.timerStatus === "paused");
+}
+
 function shouldListenForMinimalVoiceCommands(screenName = appState.currentScreen) {
+  const blockedByCookingTimer = isCookingTimerInteractionActive(screenName);
+  if (blockedByCookingTimer) {
+    recordCookingVoiceDebugEvent("cooking-timer-interaction-blocked", {
+      screen: screenName,
+      cookingIndex: appState.cookingIndex,
+      timerStatus: appState.timerStatus,
+      activeTimerSeconds: appState.activeTimerSeconds,
+      overlayMounted: Boolean(document.getElementById("timer-overlay")),
+      pauseButtonMounted: Boolean(document.getElementById("timer-pause-btn")),
+      skipButtonMounted: Boolean(document.getElementById("timer-skip-btn")),
+      spokenNextBlocked: true,
+      waitingFor: appState.timerStatus === "paused" ? "resume-or-skip" : "timer-complete-or-skip"
+    });
+  }
   return Boolean(
     isMinimalVoiceScreen(screenName) &&
     isVoiceReady() &&
-    !appState.voiceOutputSpeaking
+    !appState.voiceOutputSpeaking &&
+    !blockedByCookingTimer
   );
 }
 
@@ -4471,6 +4503,22 @@ function safeRenderCooking(context = {}) {
       voiceOutputSpeaking: appState.voiceOutputSpeaking
     });
   } catch (error) {
+    const currentStep = getCurrentCookingStep();
+    const hasTimer = Boolean(currentStep && Number.isInteger(currentStep.timerSeconds) && currentStep.timerSeconds > 0);
+    if (hasTimer) {
+      recordCookingVoiceDebugEvent("cooking-timer-step-transition-failed", {
+        source: context.source || "unknown",
+        stage: context.stage || "",
+        cookingIndex: appState.cookingIndex,
+        totalCookingSteps: Array.isArray(appState.recipe?.cookingSteps) ? appState.recipe.cookingSteps.length : 0,
+        timerStatus: appState.timerStatus,
+        activeTimerSeconds: appState.activeTimerSeconds,
+        overlayMounted: Boolean(document.getElementById("timer-overlay")),
+        pauseButtonMounted: Boolean(document.getElementById("timer-pause-btn")),
+        skipButtonMounted: Boolean(document.getElementById("timer-skip-btn")),
+        message: error instanceof Error ? error.message : String(error || "Unknown timer step render error")
+      });
+    }
     renderCookingFailureState(error, context);
   } finally {
     appState.cookingRenderInProgress = false;
@@ -6177,6 +6225,14 @@ function startStepTimerIfNeeded(step) {
     return;
   }
 
+  recordCookingVoiceDebugEvent("cooking-timer-start-requested", {
+    cookingIndex: appState.cookingIndex,
+    totalCookingSteps: Array.isArray(appState.recipe?.cookingSteps) ? appState.recipe.cookingSteps.length : 0,
+    timerStatus: appState.timerStatus,
+    activeTimerSeconds: appState.activeTimerSeconds,
+    timerSeconds: step.timerSeconds,
+    overlayMounted: Boolean(document.getElementById("timer-overlay"))
+  });
   appState.timerMessage = "Timer running";
   appState.timerPaused = false;
   setTimerStatus("running", "auto start step timer");
@@ -6191,6 +6247,17 @@ function startStepTimerIfNeeded(step) {
     step.timerSeconds,
     (secondsLeft) => {
       appState.activeTimerSeconds = secondsLeft;
+      if (secondsLeft === step.timerSeconds) {
+        recordCookingVoiceDebugEvent("cooking-timer-started", {
+          cookingIndex: appState.cookingIndex,
+          totalCookingSteps: Array.isArray(appState.recipe?.cookingSteps) ? appState.recipe.cookingSteps.length : 0,
+          timerStatus: appState.timerStatus,
+          activeTimerSeconds: secondsLeft,
+          overlayMounted: Boolean(document.getElementById("timer-overlay")),
+          pauseButtonMounted: Boolean(document.getElementById("timer-pause-btn")),
+          skipButtonMounted: Boolean(document.getElementById("timer-skip-btn"))
+        });
+      }
       const timerDisplay = document.getElementById("timerDisplay");
       if (timerDisplay) {
         timerDisplay.textContent = formatTime(secondsLeft);
@@ -6258,8 +6325,25 @@ function ensureCurrentStepTimerStarted() {
     return;
   }
 
+  recordCookingVoiceDebugEvent("cooking-timer-step-entered", {
+    cookingIndex: appState.cookingIndex,
+    totalCookingSteps: Array.isArray(appState.recipe?.cookingSteps) ? appState.recipe.cookingSteps.length : 0,
+    timerStatus: appState.timerStatus,
+    activeTimerSeconds: appState.activeTimerSeconds,
+    overlayMounted: Boolean(document.getElementById("timer-overlay")),
+    waitingFor: appState.timerStatus === "paused" ? "resume-or-skip" : "timer-complete-or-skip"
+  });
+
   const timerWasSkipped = appState.timerSkippedStepIndex === appState.cookingIndex;
   if (timerWasSkipped || appState.timerStatus === "skipped" || appState.timerStatus === "completed") {
+    recordCookingVoiceDebugEvent("cooking-timer-unlock-missing", {
+      cookingIndex: appState.cookingIndex,
+      totalCookingSteps: Array.isArray(appState.recipe?.cookingSteps) ? appState.recipe.cookingSteps.length : 0,
+      timerStatus: appState.timerStatus,
+      activeTimerSeconds: appState.activeTimerSeconds,
+      skipped: timerWasSkipped,
+      waitingFor: "manual-next-or-transition"
+    });
     return;
   }
 
@@ -6297,6 +6381,19 @@ function renderCooking() {
   const idx = appState.cookingIndex;
   const step = appState.recipe.cookingSteps[idx];
   const hasTimer = Number.isInteger(step.timerSeconds) && step.timerSeconds > 0;
+  if (hasTimer) {
+    recordCookingVoiceDebugEvent("cooking-timer-step-before-render", {
+      cookingIndex: idx,
+      totalCookingSteps: total,
+      timerStatus: appState.timerStatus,
+      activeTimerSeconds: appState.activeTimerSeconds,
+      overlayMounted: Boolean(document.getElementById("timer-overlay")),
+      pauseButtonMounted: Boolean(document.getElementById("timer-pause-btn")),
+      skipButtonMounted: Boolean(document.getElementById("timer-skip-btn")),
+      spokenNextBlocked: !canProceedFromTimerStep(),
+      waitingFor: appState.timerStatus === "paused" ? "resume-or-skip" : "timer-complete-or-skip"
+    });
+  }
   const cookingVoiceAvailable = Boolean(appState.voiceEnabled && isVoiceRecognitionAllowedOnScreen("cooking"));
   recordCookingVoiceDebugEvent("cooking-step-entered", {
     cookingIndex: idx,
@@ -6479,6 +6576,19 @@ function renderCooking() {
     onRepeat: () => repeatCurrentCookingStep(),
     repeatEnabled: true
   }));
+  if (hasTimer) {
+    recordCookingVoiceDebugEvent("cooking-timer-step-after-render", {
+      cookingIndex: idx,
+      totalCookingSteps: total,
+      timerStatus: appState.timerStatus,
+      activeTimerSeconds: appState.activeTimerSeconds,
+      overlayMounted: Boolean(document.getElementById("timer-overlay")),
+      pauseButtonMounted: Boolean(document.getElementById("timer-pause-btn")),
+      skipButtonMounted: Boolean(document.getElementById("timer-skip-btn")),
+      spokenNextBlocked: !canProceedFromTimerStep(),
+      waitingFor: appState.timerStatus === "paused" ? "resume-or-skip" : "timer-complete-or-skip"
+    });
+  }
   recordCookingVoiceDebugEvent("render-cooking-complete", {
     cookingIndex: idx,
     timerStatus: appState.timerStatus,
