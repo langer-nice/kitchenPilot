@@ -60,7 +60,10 @@ const appState = {
   voiceIngredientHighlightIndex: null,
   voiceIngredientHighlightTimeoutId: null,
   timerSkippedStepIndex: null,
-  preparationSpeechFrameId: null
+  preparationSpeechFrameId: null,
+  cookingRenderInProgress: false,
+  cookingRenderQueued: false,
+  cookingFailureMessage: ""
 };
 
 const appEl = document.getElementById("app");
@@ -118,6 +121,11 @@ function createTimerOverlayElement() {
 function updateTimerOverlay() {
   const overlay = document.getElementById("timer-overlay");
   if (!overlay) {
+    recordCookingVoiceDebugEvent("timer-overlay-missing", {
+      screen: appState.currentScreen,
+      timerStatus: appState.timerStatus,
+      activeTimerSeconds: appState.activeTimerSeconds
+    });
     return;
   }
   const timerValue = document.getElementById("timer-value");
@@ -292,7 +300,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v116"; 
+const BUILD_VERSION = "DEV BUILD: v117"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -528,6 +536,9 @@ function renderCurrentVoiceScreen() {
   }
   if (appState.currentScreen === "cooking") {
     safeRenderCooking({ source: "renderCurrentVoiceScreen" });
+  }
+  if (appState.currentScreen === "cookingFailure") {
+    renderCookingFailureScreen();
   }
   if (appState.currentScreen === "timerActive") {
     renderTimerActive();
@@ -4306,11 +4317,29 @@ function setVoiceHint(message, timeoutMs = 2500) {
 }
 
 function renderCookingFailureState(error, context = {}) {
+  appState.currentScreen = "cookingFailure";
+  appState.cookingRenderQueued = false;
+  appState.cookingFailureMessage = error instanceof Error ? error.message : "Unknown cooking initialization error.";
+  stopTimer();
+  appState.activeTimerSeconds = null;
+  appState.timerPaused = false;
+  appState.timerMessage = "";
+  appState.timerSkippedStepIndex = null;
+  appState.cookingVoiceReadyAfterTimerPending = false;
+  stopMinimalVoiceController();
+  setTimerStatus("idle", "cooking failure cleanup");
+  recordCookingVoiceDebugEvent("cooking-failure-fallback-activated", {
+    source: context.source || "unknown",
+    stage: context.stage || "",
+    message: appState.cookingFailureMessage,
+    timerOverlayWasActive: isTimerOverlayActive(),
+    timerStatus: appState.timerStatus
+  });
   console.error("[cooking-entry] cooking render failed", error, context);
   recordCookingVoiceDebugEvent("cooking-render-failed", {
     source: context.source || "unknown",
     stage: context.stage || "",
-    message: error instanceof Error ? error.message : String(error || "Unknown cooking render error"),
+    message: appState.cookingFailureMessage,
     cookingIndex: appState.cookingIndex,
     timerStatus: appState.timerStatus,
     voiceEnabled: appState.voiceEnabled,
@@ -4320,7 +4349,8 @@ function renderCookingFailureState(error, context = {}) {
   });
 
   const { header, main, footer } = createStageScreenShell({
-    screenClassName: "completed-screen"
+    screenClassName: "completed-screen",
+    includeTimerOverlay: false
   });
 
   const title = document.createElement("h1");
@@ -4334,7 +4364,7 @@ function renderCookingFailureState(error, context = {}) {
 
   const details = document.createElement("p");
   details.className = "small stage-description";
-  details.textContent = error instanceof Error ? error.message : "Unknown cooking initialization error.";
+  details.textContent = appState.cookingFailureMessage;
 
   main.append(message, details);
 
@@ -4348,14 +4378,60 @@ function renderCookingFailureState(error, context = {}) {
     {
       label: "Retry",
       className: "primary",
-      onClick: () => safeRenderCooking({ source: "retry-button", stage: "retry" }),
+      onClick: () => {
+        appState.currentScreen = "cooking";
+        appState.cookingFailureMessage = "";
+        safeRenderCooking({ source: "retry-button", stage: "retry" });
+      },
       actionName: "retry"
     }
   ], "stage-actions stage-actions--two"));
+
+  const timerOverlay = document.getElementById("timer-overlay");
+  recordCookingVoiceDebugEvent("cooking-failure-timer-cleanup", {
+    overlayMountedAfterFailure: Boolean(timerOverlay),
+    pauseButtonMountedAfterFailure: Boolean(document.getElementById("timer-pause-btn")),
+    skipButtonMountedAfterFailure: Boolean(document.getElementById("timer-skip-btn")),
+    timerStatus: appState.timerStatus,
+    activeTimerSeconds: appState.activeTimerSeconds
+  });
+}
+
+function renderCookingFailureScreen() {
+  renderCookingFailureState(new Error(appState.cookingFailureMessage || "Unknown cooking initialization error."), {
+    source: "rerenderCurrentScreen",
+    stage: "cookingFailure"
+  });
 }
 
 function safeRenderCooking(context = {}) {
+  if (appState.cookingRenderInProgress) {
+    recordCookingVoiceDebugEvent("cooking-render-recursion-detected", {
+      source: context.source || "unknown",
+      stage: context.stage || "",
+      cookingIndex: appState.cookingIndex,
+      timerStatus: appState.timerStatus,
+      voiceListening: appState.voiceListening,
+      voiceOutputSpeaking: appState.voiceOutputSpeaking
+    });
+    if (!appState.cookingRenderQueued) {
+      appState.cookingRenderQueued = true;
+      window.setTimeout(() => {
+        appState.cookingRenderQueued = false;
+        if (appState.currentScreen === "cooking") {
+          safeRenderCooking({
+            source: context.source ? `${context.source}:queued` : "queued-cooking-render",
+            stage: "reentrant-queue"
+          });
+        }
+      }, 0);
+    }
+    return;
+  }
+
+  appState.cookingRenderInProgress = true;
   try {
+    appState.cookingFailureMessage = "";
     renderCooking();
     recordCookingVoiceDebugEvent("render-cooking-finished", {
       source: context.source || "unknown",
@@ -4367,6 +4443,8 @@ function safeRenderCooking(context = {}) {
     });
   } catch (error) {
     renderCookingFailureState(error, context);
+  } finally {
+    appState.cookingRenderInProgress = false;
   }
 }
 
@@ -4647,7 +4725,7 @@ function createTitledPage(title, subtitle, screenClassName = "") {
 }
 
 function createStageScreenShell(options = {}) {
-  const { screenClassName = "" } = options;
+  const { screenClassName = "", includeTimerOverlay = true } = options;
 
   appEl.innerHTML = "";
 
@@ -4666,12 +4744,11 @@ function createStageScreenShell(options = {}) {
   const footer = document.createElement("div");
   footer.className = "action-bar action-bar--stage";
 
-  const timerOverlay = createTimerOverlayElement();
-
-  pageFooter.append(
-    footer,
-    timerOverlay
-  );
+  pageFooter.appendChild(footer);
+  if (includeTimerOverlay) {
+    const timerOverlay = createTimerOverlayElement();
+    pageFooter.appendChild(timerOverlay);
+  }
 
   screen.append(header, main, pageFooter);
   appEl.appendChild(screen);
@@ -4758,6 +4835,9 @@ function rerenderCurrentScreen() {
       break;
     case "cooking":
       safeRenderCooking({ source: "rerenderCurrentScreen" });
+      break;
+    case "cookingFailure":
+      renderCookingFailureScreen();
       break;
     case "timerActive":
       renderTimerActive();
