@@ -300,7 +300,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v119"; 
+const BUILD_VERSION = "DEV BUILD: v120"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -6265,6 +6265,8 @@ function startStepTimerIfNeeded(step) {
       updateTimerOverlay();
     },
     () => {
+      const totalCookingSteps = Array.isArray(appState.recipe?.cookingSteps) ? appState.recipe.cookingSteps.length : 0;
+      const isLastCookingStep = totalCookingSteps > 0 && appState.cookingIndex >= totalCookingSteps - 1;
       appState.activeTimerSeconds = 0;
       appState.timerMessage = "Timer finished";
       appState.timerPaused = false;
@@ -6277,6 +6279,34 @@ function startStepTimerIfNeeded(step) {
         liveTranscript: appState.voiceLastTranscript || appState.voiceHeard || "",
         liveCommand: appState.voiceLastMatchedCommand || ""
       });
+      if (isLastCookingStep) {
+        recordCookingVoiceDebugEvent("cooking-final-timer-finished", {
+          cookingIndex: appState.cookingIndex,
+          totalCookingSteps,
+          timerStatus: appState.timerStatus,
+          activeTimerSeconds: appState.activeTimerSeconds,
+          isLastCookingStep: true,
+          transitionTarget: "completed",
+          tapStillEnabled: true,
+          spokenNextStillEnabled: false
+        });
+        recordCookingVoiceDebugEvent("cooking-final-step-detected", {
+          cookingIndex: appState.cookingIndex,
+          totalCookingSteps,
+          timerStatus: appState.timerStatus,
+          activeTimerSeconds: appState.activeTimerSeconds,
+          isLastCookingStep: true,
+          transitionTarget: "completed"
+        });
+        recordCookingVoiceDebugEvent("cooking-final-step-no-next-step", {
+          cookingIndex: appState.cookingIndex,
+          totalCookingSteps,
+          timerStatus: appState.timerStatus,
+          activeTimerSeconds: appState.activeTimerSeconds,
+          isLastCookingStep: true,
+          transitionTarget: "completed"
+        });
+      }
       console.warn("[cooking-debug] cooking-timer-finished", {
         screen: appState.currentScreen,
         cookingIndex: appState.cookingIndex,
@@ -6287,6 +6317,16 @@ function startStepTimerIfNeeded(step) {
         liveCommand: appState.voiceLastMatchedCommand || "",
         screenMode: getVoiceScreenMode()
       });
+      if (isLastCookingStep) {
+        console.warn("[cooking-debug] cooking-final-timer-finished", {
+          screen: appState.currentScreen,
+          cookingIndex: appState.cookingIndex,
+          totalCookingSteps,
+          timerStatus: appState.timerStatus,
+          activeTimerSeconds: appState.activeTimerSeconds,
+          transitionTarget: "completed"
+        });
+      }
       appState.cookingVoiceReadyAfterTimerPending = true;
       suspendVoiceRecognitionForCurrentScreen("cooking-timer-finished");
       const timerNotice = document.getElementById("timerNotice");
@@ -6303,6 +6343,49 @@ function startStepTimerIfNeeded(step) {
           cookingIndex: appState.cookingIndex,
           timerStatus: appState.timerStatus
         });
+      }
+
+      if (isLastCookingStep) {
+        recordCookingVoiceDebugEvent("cooking-final-step-interaction-lock-state", {
+          cookingIndex: appState.cookingIndex,
+          totalCookingSteps,
+          timerStatus: appState.timerStatus,
+          activeTimerSeconds: appState.activeTimerSeconds,
+          isLastCookingStep: true,
+          tapStillEnabled: true,
+          spokenNextStillEnabled: false,
+          transitionTarget: "completed"
+        });
+        recordCookingVoiceDebugEvent("cooking-final-step-advance-blocked", {
+          cookingIndex: appState.cookingIndex,
+          totalCookingSteps,
+          timerStatus: appState.timerStatus,
+          activeTimerSeconds: appState.activeTimerSeconds,
+          isLastCookingStep: true,
+          reason: "timer-finished-final-step-uses-complete-transition",
+          transitionTarget: "completed"
+        });
+        recordCookingVoiceDebugEvent("cooking-final-step-before-complete-transition", {
+          cookingIndex: appState.cookingIndex,
+          totalCookingSteps,
+          timerStatus: appState.timerStatus,
+          activeTimerSeconds: appState.activeTimerSeconds,
+          isLastCookingStep: true,
+          transitionTarget: "completed"
+        });
+        appState.cookingVoiceReadyAfterTimerPending = false;
+        stopMinimalVoiceController();
+        setScreen("completed");
+        recordCookingVoiceDebugEvent("cooking-final-step-after-complete-transition", {
+          cookingIndex: appState.cookingIndex,
+          totalCookingSteps,
+          timerStatus: appState.timerStatus,
+          activeTimerSeconds: appState.activeTimerSeconds,
+          isLastCookingStep: true,
+          transitionTarget: "completed",
+          resultingScreen: appState.currentScreen
+        });
+        return;
       }
 
       if (appState.currentScreen === "cooking") {
