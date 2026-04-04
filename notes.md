@@ -8,15 +8,14 @@ https://platform.openai.com/api-keys
 
 
 Ingredients 
-300g spaghetti
-2 garlic cloves
-2 tbsp olive oil
+1 tbsp any vinegar or lemon juice (my favourite is cider vinegar) (Note 1)
+3 tbsp extra virgin olive oil or other neutral oil
+1/2 tsp Dijon Mustard (or other non spicy smooth mustard)
+1/2 tsp EACH salt and pepper
 
 Instructions
-Boil the spaghetti for 10 minutes.
-Heat olive oil in a pan.
-Add garlic and cook for 30 seconds.
-Add the pasta and mix.
+Mix ingredients together 
+Season with salt and pepper
 
 
 

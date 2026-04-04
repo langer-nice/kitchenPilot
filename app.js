@@ -300,7 +300,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v120"; 
+const BUILD_VERSION = "DEV BUILD: v121"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -2229,6 +2229,21 @@ function setScreen(screenName) {
       lastAcceptedCommandScreen: appState.voiceLastAcceptedCommandScreen || "",
       msSinceAcceptedVoiceCommand: lastAcceptedCommandAt ? roundVoiceTiming(enteredAt - lastAcceptedCommandAt) : null
     });
+    if (appState.recipe && appState.cookingIndex === 0 && appState.preparationIndex === 0) {
+      recordVoiceDebugEvent("recook-after-cooking-entry", {
+        previousScreen,
+        nextScreen: screenName,
+        preparationIndex: appState.preparationIndex,
+        cookingIndex: appState.cookingIndex,
+        lastSpokenCookingIndex: appState.lastSpokenCookingIndex,
+        cookingRenderInProgress: appState.cookingRenderInProgress,
+        cookingRenderQueued: appState.cookingRenderQueued,
+        voiceEnabled: appState.voiceEnabled,
+        voiceListening: appState.voiceListening,
+        voiceOutputSpeaking: appState.voiceOutputSpeaking,
+        runType: "recook-or-fresh"
+      });
+    }
     recordCookingIntroDebugEvent("screen-change-to-cooking", {
       previousScreen,
       nextScreen: screenName,
@@ -2690,6 +2705,55 @@ function resetRecipeSessionState() {
   appState.cookingVoiceConsumedTranscript = "";
   appState.cookingFailureMessage = "";
   setTimerStatus("idle", "reset recipe session");
+}
+
+function resetRecipeRuntimeState(options = {}) {
+  const { preserveRecipe = true, reason = "reset recipe runtime" } = options;
+  const currentRecipe = appState.recipe;
+
+  stopTimer();
+  clearTimerMessageLater();
+  stopMinimalVoiceController();
+  clearDeferredPreparationSpeech();
+  clearMinimalVoiceTranscriptState();
+  resetVoiceActivityState();
+
+  appState.ingredientChecks = preserveRecipe && currentRecipe
+    ? (Array.isArray(currentRecipe.ingredients) ? currentRecipe.ingredients.map(() => false) : [])
+    : [];
+  appState.preparationIndex = 0;
+  appState.cookingIndex = 0;
+  appState.timerMessage = "";
+  appState.timerPaused = false;
+  appState.activeTimerSeconds = null;
+  appState.timerSkippedStepIndex = null;
+  appState.cookingVoiceReadyAfterTimerPending = false;
+  appState.lastSpokenPreparationIndex = null;
+  appState.lastSpokenCookingIndex = null;
+  appState.pendingIntroAdvance = null;
+  appState.cookingVoiceConsumedSessionId = 0;
+  appState.cookingVoiceConsumedCommandKey = "";
+  appState.cookingVoiceConsumedTranscript = "";
+  appState.cookingFailureMessage = "";
+  appState.cookingRenderInProgress = false;
+  appState.cookingRenderQueued = false;
+  appState.voiceLastTranscript = "";
+  appState.voiceLastTranscriptAt = 0;
+  appState.voiceLastMatchedCommand = "";
+  appState.voiceLastAction = "";
+  appState.voiceLastAcceptedCommandAt = 0;
+  appState.voiceLastAcceptedCommandScreen = "";
+  appState.voiceLastAcceptedCommandTranscript = "";
+  appState.voiceHeard = "";
+  appState.voiceExecuting = false;
+  appState.voiceIntroAcceptCommandsAt = 0;
+  appState.voicePreparationStepEnteredAt = 0;
+  appState.voicePreparationAcceptCommandsAt = 0;
+  appState.voiceCommandLockUntil = 0;
+  appState.voiceCommandLockReason = "";
+  setVoiceCommandStatus("", 0);
+  setTimerStatus("idle", reason);
+  updateTimerOverlay();
 }
 
 function clearHomeRecipeInputState() {
@@ -3408,6 +3472,21 @@ function skipTimerAndAdvance() {
 }
 
 function enterCookingFlow(context = {}) {
+  if (appState.preparationIndex === 0 && appState.cookingIndex === 0) {
+    recordVoiceDebugEvent("recook-before-cooking-entry", {
+      triggerSource: context.source || "unknown",
+      triggerDetail: context.triggerDetail || "",
+      preparationIndex: appState.preparationIndex,
+      cookingIndex: appState.cookingIndex,
+      lastSpokenCookingIndex: appState.lastSpokenCookingIndex,
+      cookingRenderInProgress: appState.cookingRenderInProgress,
+      cookingRenderQueued: appState.cookingRenderQueued,
+      voiceEnabled: appState.voiceEnabled,
+      voiceListening: appState.voiceListening,
+      voiceOutputSpeaking: appState.voiceOutputSpeaking,
+      runType: "recook-or-fresh"
+    });
+  }
   recordCookingIntroDebugEvent("cooking-entry-before-leave-intro", {
     triggerSource: context.source || "unknown",
     triggerDetail: context.triggerDetail || "",
@@ -4503,6 +4582,20 @@ function safeRenderCooking(context = {}) {
       voiceOutputSpeaking: appState.voiceOutputSpeaking
     });
   } catch (error) {
+    if (appState.cookingIndex === 0) {
+      recordVoiceDebugEvent("recook-first-cooking-step-freeze-suspected", {
+        preparationIndex: appState.preparationIndex,
+        cookingIndex: appState.cookingIndex,
+        lastSpokenCookingIndex: appState.lastSpokenCookingIndex,
+        cookingRenderInProgress: appState.cookingRenderInProgress,
+        cookingRenderQueued: appState.cookingRenderQueued,
+        voiceEnabled: appState.voiceEnabled,
+        voiceListening: appState.voiceListening,
+        voiceOutputSpeaking: appState.voiceOutputSpeaking,
+        message: error instanceof Error ? error.message : String(error || "Unknown cooking render error"),
+        runType: "recook-or-fresh"
+      });
+    }
     const currentStep = getCurrentCookingStep();
     const hasTimer = Boolean(currentStep && Number.isInteger(currentStep.timerSeconds) && currentStep.timerSeconds > 0);
     if (hasTimer) {
@@ -5932,6 +6025,19 @@ function renderStageIntro(title, description, backScreen, continueScreen, contin
 
 function renderIngredientsIntro() {
   const { header, main, footer } = createStageScreenShell();
+  if (appState.preparationIndex === 0 && appState.cookingIndex === 0) {
+    recordVoiceDebugEvent("recook-before-first-intro", {
+      preparationIndex: appState.preparationIndex,
+      cookingIndex: appState.cookingIndex,
+      lastSpokenCookingIndex: appState.lastSpokenCookingIndex,
+      cookingRenderInProgress: appState.cookingRenderInProgress,
+      cookingRenderQueued: appState.cookingRenderQueued,
+      voiceEnabled: appState.voiceEnabled,
+      voiceListening: appState.voiceListening,
+      voiceOutputSpeaking: appState.voiceOutputSpeaking,
+      runType: "recook-or-fresh"
+    });
+  }
 
   const title = document.createElement("h1");
   title.className = "stage-title";
@@ -6464,6 +6570,20 @@ function renderCooking() {
   const idx = appState.cookingIndex;
   const step = appState.recipe.cookingSteps[idx];
   const hasTimer = Number.isInteger(step.timerSeconds) && step.timerSeconds > 0;
+  if (idx === 0) {
+    recordVoiceDebugEvent("recook-first-cooking-step-before-render", {
+      preparationIndex: appState.preparationIndex,
+      cookingIndex: idx,
+      lastSpokenCookingIndex: appState.lastSpokenCookingIndex,
+      cookingRenderInProgress: appState.cookingRenderInProgress,
+      cookingRenderQueued: appState.cookingRenderQueued,
+      voiceEnabled: appState.voiceEnabled,
+      voiceListening: appState.voiceListening,
+      voiceOutputSpeaking: appState.voiceOutputSpeaking,
+      hasTimer,
+      runType: "recook-or-fresh"
+    });
+  }
   if (hasTimer) {
     recordCookingVoiceDebugEvent("cooking-timer-step-before-render", {
       cookingIndex: idx,
@@ -6679,6 +6799,20 @@ function renderCooking() {
     voiceListening: appState.voiceListening,
     voiceOutputSpeaking: appState.voiceOutputSpeaking
   });
+  if (idx === 0) {
+    recordVoiceDebugEvent("recook-first-cooking-step-after-render", {
+      preparationIndex: appState.preparationIndex,
+      cookingIndex: idx,
+      lastSpokenCookingIndex: appState.lastSpokenCookingIndex,
+      cookingRenderInProgress: appState.cookingRenderInProgress,
+      cookingRenderQueued: appState.cookingRenderQueued,
+      voiceEnabled: appState.voiceEnabled,
+      voiceListening: appState.voiceListening,
+      voiceOutputSpeaking: appState.voiceOutputSpeaking,
+      hasTimer,
+      runType: "recook-or-fresh"
+    });
+  }
 }
 
 function renderTimerActive() {
@@ -6783,10 +6917,32 @@ function renderCompleted() {
   actions.className = "completed-actions";
   actions.append(
     createButton("Cook Again", "primary", () => {
-      appState.preparationIndex = 0;
-      appState.cookingIndex = 0;
-      appState.timerSkippedStepIndex = null;
-      initializeIngredientChecklist(appState.recipe);
+      recordVoiceDebugEvent("recook-triggered", {
+        preparationIndex: appState.preparationIndex,
+        cookingIndex: appState.cookingIndex,
+        lastSpokenCookingIndex: appState.lastSpokenCookingIndex,
+        cookingRenderInProgress: appState.cookingRenderInProgress,
+        cookingRenderQueued: appState.cookingRenderQueued,
+        voiceEnabled: appState.voiceEnabled,
+        voiceListening: appState.voiceListening,
+        voiceOutputSpeaking: appState.voiceOutputSpeaking,
+        runType: "recook"
+      });
+      resetRecipeRuntimeState({
+        preserveRecipe: true,
+        reason: "recook runtime reset"
+      });
+      recordVoiceDebugEvent("recook-runtime-state-reset", {
+        preparationIndex: appState.preparationIndex,
+        cookingIndex: appState.cookingIndex,
+        lastSpokenCookingIndex: appState.lastSpokenCookingIndex,
+        cookingRenderInProgress: appState.cookingRenderInProgress,
+        cookingRenderQueued: appState.cookingRenderQueued,
+        voiceEnabled: appState.voiceEnabled,
+        voiceListening: appState.voiceListening,
+        voiceOutputSpeaking: appState.voiceOutputSpeaking,
+        runType: "recook"
+      });
       setScreen("ingredientsIntro");
     }),
     createButton("Save Recipe", "", () => {
