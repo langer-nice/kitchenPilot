@@ -302,7 +302,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v122"; 
+const BUILD_VERSION = "DEV BUILD: v123"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -3362,12 +3362,142 @@ function goToNextCookingStep() {
     return;
   }
 
+  const previousCookingIndex = appState.cookingIndex;
+  const previousStep = getCurrentCookingStep();
+  const previousStepHasTimer = Boolean(previousStep && Number.isInteger(previousStep.timerSeconds) && previousStep.timerSeconds > 0);
+  const currentStepWasPostTimerNonTimer = Boolean(
+    appState.cookingIndex > 0 &&
+    !previousStepHasTimer &&
+    Boolean(appState.recipe.cookingSteps[appState.cookingIndex - 1] && Number.isInteger(appState.recipe.cookingSteps[appState.cookingIndex - 1].timerSeconds) && appState.recipe.cookingSteps[appState.cookingIndex - 1].timerSeconds > 0)
+  );
+
+  if (currentStepWasPostTimerNonTimer) {
+    recordCookingVoiceDebugEvent("cooking-post-timer-next-received", {
+      previousCookingIndex: appState.cookingIndex - 1,
+      currentCookingIndex: appState.cookingIndex,
+      nextCookingIndex: appState.cookingIndex + 1,
+      previousStepHasTimer: true,
+      currentStepHasTimer: previousStepHasTimer,
+      nextStepHasTimer: Boolean(appState.recipe.cookingSteps[appState.cookingIndex + 1]?.timerSeconds),
+      timerStatus: appState.timerStatus,
+      activeTimerSeconds: appState.activeTimerSeconds,
+      overlayMounted: Boolean(document.getElementById("timer-overlay")),
+      voiceEnabled: appState.voiceEnabled,
+      voiceListening: appState.voiceListening,
+      voiceOutputSpeaking: appState.voiceOutputSpeaking,
+      commandLockActive: isVoiceCommandLocked()
+    });
+    recordCookingVoiceDebugEvent("cooking-post-timer-next-before-transition", {
+      previousCookingIndex: appState.cookingIndex - 1,
+      currentCookingIndex: appState.cookingIndex,
+      nextCookingIndex: appState.cookingIndex + 1,
+      previousStepHasTimer: true,
+      currentStepHasTimer: previousStepHasTimer,
+      nextStepHasTimer: Boolean(appState.recipe.cookingSteps[appState.cookingIndex + 1]?.timerSeconds),
+      timerStatus: appState.timerStatus,
+      activeTimerSeconds: appState.activeTimerSeconds,
+      overlayMounted: Boolean(document.getElementById("timer-overlay")),
+      voiceEnabled: appState.voiceEnabled,
+      voiceListening: appState.voiceListening,
+      voiceOutputSpeaking: appState.voiceOutputSpeaking,
+      commandLockActive: isVoiceCommandLocked()
+    });
+  }
+
   if (appState.cookingIndex < appState.recipe.cookingSteps.length - 1) {
     appState.cookingIndex += 1;
+    const nextStep = getCurrentCookingStep();
+    const nextStepHasTimer = Boolean(nextStep && Number.isInteger(nextStep.timerSeconds) && nextStep.timerSeconds > 0);
+    if (previousStepHasTimer && !nextStepHasTimer) {
+      recordCookingVoiceDebugEvent("cooking-post-timer-step-entered", {
+        previousCookingIndex,
+        currentCookingIndex: appState.cookingIndex,
+        nextCookingIndex: appState.cookingIndex + 1,
+        previousStepHasTimer,
+        currentStepHasTimer: nextStepHasTimer,
+        nextStepHasTimer: Boolean(appState.recipe.cookingSteps[appState.cookingIndex + 1]?.timerSeconds),
+        timerStatus: appState.timerStatus,
+        activeTimerSeconds: appState.activeTimerSeconds,
+        overlayMounted: Boolean(document.getElementById("timer-overlay")),
+        voiceEnabled: appState.voiceEnabled,
+        voiceListening: appState.voiceListening,
+        voiceOutputSpeaking: appState.voiceOutputSpeaking,
+        commandLockActive: isVoiceCommandLocked()
+      });
+      recordCookingVoiceDebugEvent("cooking-post-timer-non-timer-step-detected", {
+        previousCookingIndex,
+        currentCookingIndex: appState.cookingIndex,
+        nextCookingIndex: appState.cookingIndex + 1,
+        previousStepHasTimer,
+        currentStepHasTimer: nextStepHasTimer,
+        nextStepHasTimer: Boolean(appState.recipe.cookingSteps[appState.cookingIndex + 1]?.timerSeconds),
+        timerStatus: appState.timerStatus,
+        activeTimerSeconds: appState.activeTimerSeconds,
+        overlayMounted: Boolean(document.getElementById("timer-overlay")),
+        voiceEnabled: appState.voiceEnabled,
+        voiceListening: appState.voiceListening,
+        voiceOutputSpeaking: appState.voiceOutputSpeaking,
+        commandLockActive: isVoiceCommandLocked()
+      });
+      recordCookingVoiceDebugEvent("cooking-post-timer-state-before-cleanup", {
+        previousCookingIndex,
+        currentCookingIndex: appState.cookingIndex,
+        previousStepHasTimer,
+        currentStepHasTimer: nextStepHasTimer,
+        timerStatus: appState.timerStatus,
+        activeTimerSeconds: appState.activeTimerSeconds,
+        overlayMounted: Boolean(document.getElementById("timer-overlay")),
+        cookingVoiceReadyAfterTimerPending: appState.cookingVoiceReadyAfterTimerPending,
+        timerSkippedStepIndex: appState.timerSkippedStepIndex,
+        voiceEnabled: appState.voiceEnabled,
+        voiceListening: appState.voiceListening,
+        voiceOutputSpeaking: appState.voiceOutputSpeaking,
+        commandLockActive: isVoiceCommandLocked()
+      });
+      appState.cookingVoiceReadyAfterTimerPending = false;
+      appState.activeTimerSeconds = null;
+      appState.timerMessage = "";
+      appState.timerPaused = false;
+      appState.timerSkippedStepIndex = null;
+      setTimerStatus("idle", "post-timer cleanup before non-timer step");
+      updateTimerOverlay();
+      recordCookingVoiceDebugEvent("cooking-post-timer-state-after-cleanup", {
+        previousCookingIndex,
+        currentCookingIndex: appState.cookingIndex,
+        previousStepHasTimer,
+        currentStepHasTimer: nextStepHasTimer,
+        timerStatus: appState.timerStatus,
+        activeTimerSeconds: appState.activeTimerSeconds,
+        overlayMounted: Boolean(document.getElementById("timer-overlay")),
+        cookingVoiceReadyAfterTimerPending: appState.cookingVoiceReadyAfterTimerPending,
+        timerSkippedStepIndex: appState.timerSkippedStepIndex,
+        voiceEnabled: appState.voiceEnabled,
+        voiceListening: appState.voiceListening,
+        voiceOutputSpeaking: appState.voiceOutputSpeaking,
+        commandLockActive: isVoiceCommandLocked()
+      });
+    }
     appState.activeTimerSeconds = null;
     setTimerStatus("idle", "next step");
     appState.timerSkippedStepIndex = null;
     safeRenderCooking({ source: "goToNextCookingStep" });
+    if (currentStepWasPostTimerNonTimer) {
+      recordCookingVoiceDebugEvent("cooking-post-timer-next-after-transition", {
+        previousCookingIndex,
+        currentCookingIndex: appState.cookingIndex,
+        nextCookingIndex: appState.cookingIndex + 1,
+        previousStepHasTimer,
+        currentStepHasTimer: Boolean(getCurrentCookingStep() && Number.isInteger(getCurrentCookingStep().timerSeconds) && getCurrentCookingStep().timerSeconds > 0),
+        nextStepHasTimer: Boolean(appState.recipe.cookingSteps[appState.cookingIndex + 1]?.timerSeconds),
+        timerStatus: appState.timerStatus,
+        activeTimerSeconds: appState.activeTimerSeconds,
+        overlayMounted: Boolean(document.getElementById("timer-overlay")),
+        voiceEnabled: appState.voiceEnabled,
+        voiceListening: appState.voiceListening,
+        voiceOutputSpeaking: appState.voiceOutputSpeaking,
+        commandLockActive: isVoiceCommandLocked()
+      });
+    }
   } else {
     recordAutoFlowDebugEvent("auto-advance-cooking-to-completed", {
       trigger: "goToNextCookingStep:end-of-cooking",
@@ -4599,6 +4729,28 @@ function safeRenderCooking(context = {}) {
       voiceOutputSpeaking: appState.voiceOutputSpeaking
     });
   } catch (error) {
+    const currentStep = getCurrentCookingStep();
+    const currentStepHasTimer = Boolean(currentStep && Number.isInteger(currentStep.timerSeconds) && currentStep.timerSeconds > 0);
+    const previousStep = appState.recipe?.cookingSteps?.[appState.cookingIndex - 1] || null;
+    const previousStepHasTimer = Boolean(previousStep && Number.isInteger(previousStep.timerSeconds) && previousStep.timerSeconds > 0);
+    if (appState.cookingIndex > 0 && previousStepHasTimer && !currentStepHasTimer) {
+      recordCookingVoiceDebugEvent("cooking-post-timer-next-freeze-suspected", {
+        previousCookingIndex: appState.cookingIndex - 1,
+        currentCookingIndex: appState.cookingIndex,
+        nextCookingIndex: appState.cookingIndex + 1,
+        previousStepHasTimer,
+        currentStepHasTimer,
+        nextStepHasTimer: Boolean(appState.recipe?.cookingSteps?.[appState.cookingIndex + 1]?.timerSeconds),
+        timerStatus: appState.timerStatus,
+        activeTimerSeconds: appState.activeTimerSeconds,
+        overlayMounted: Boolean(document.getElementById("timer-overlay")),
+        voiceEnabled: appState.voiceEnabled,
+        voiceListening: appState.voiceListening,
+        voiceOutputSpeaking: appState.voiceOutputSpeaking,
+        commandLockActive: isVoiceCommandLocked(),
+        message: error instanceof Error ? error.message : String(error || "Unknown post-timer transition error")
+      });
+    }
     if (appState.cookingIndex === 0) {
       recordVoiceDebugEvent("recook-first-cooking-step-freeze-suspected", {
         preparationIndex: appState.preparationIndex,
@@ -4613,8 +4765,7 @@ function safeRenderCooking(context = {}) {
         runType: "recook-or-fresh"
       });
     }
-    const currentStep = getCurrentCookingStep();
-    const hasTimer = Boolean(currentStep && Number.isInteger(currentStep.timerSeconds) && currentStep.timerSeconds > 0);
+    const hasTimer = currentStepHasTimer;
     if (hasTimer) {
       recordCookingVoiceDebugEvent("cooking-timer-step-transition-failed", {
         source: context.source || "unknown",
