@@ -4,6 +4,11 @@
   "private": true,
   "description": "KitchenPilot mobile-first prototype with local AI recipe parsing",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.53.0"
   }
 }

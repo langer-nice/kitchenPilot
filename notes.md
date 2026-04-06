@@ -18,9 +18,9 @@ Juice the lemon
 Open the mustard
 
 Instructions
-Mix ingredients together & Stir for 05 seconds
+Mix ingredients together & Stir for 03 seconds
 Season with salt and pepper
-Add mustard together & Stir for 05 seconds
+Add mustard together & Stir for 03 seconds
 Serve on a plate
 
 

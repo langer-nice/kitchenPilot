@@ -303,7 +303,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v125"; 
+const BUILD_VERSION = "DEV BUILD: v126"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -2179,6 +2179,7 @@ function setScreen(screenName) {
   }
 
   appState.currentScreen = screenName;
+  appEl.dataset.screen = screenName;
   appState.voiceScreenEnteredAt = enteredAt;
   appState.voiceLastTranscript = "";
   appState.voiceLastMatchedCommand = "";
