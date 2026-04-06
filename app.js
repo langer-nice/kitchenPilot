@@ -302,7 +302,7 @@ Instructions:
 const EXAMPLE_RECIPE_TEXT = DEV_MODE ? DEV_EXAMPLE_RECIPE_TEXT : NORMAL_EXAMPLE_RECIPE_TEXT;
 // "(DEV)" means the example recipe uses short timers for faster testing.
 const EXAMPLE_RECIPE_BUTTON_LABEL = DEV_MODE ? "Load Example Recipe (DEV)" : "Load Example Recipe";
-const BUILD_VERSION = "DEV BUILD: v123"; 
+const BUILD_VERSION = "DEV BUILD: v124"; 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
 const INGREDIENT_STAGE_ICON = "assets/img/pizza-slice.svg";
 const COOKING_STAGE_ICON = "assets/img/icon-kitchenpilot.svg";
@@ -2718,13 +2718,37 @@ function resetRecipeRuntimeState(options = {}) {
   const { preserveRecipe = true, reason = "reset recipe runtime" } = options;
   const currentRecipe = appState.recipe;
 
-  stopTimer();
+  recordVoiceDebugEvent("runtime-reset-start", {
+    reason,
+    preserveRecipe,
+    voiceListening: appState.voiceListening,
+    voiceOutputSpeaking: appState.voiceOutputSpeaking,
+    cookingRenderInProgress: appState.cookingRenderInProgress,
+    cookingRenderQueued: appState.cookingRenderQueued
+  });
+
+  if (appState.voiceHintTimeoutId) {
+    window.clearTimeout(appState.voiceHintTimeoutId);
+    appState.voiceHintTimeoutId = null;
+  }
+  if (appState.voiceUserSpeakingTimeoutId) {
+    window.clearTimeout(appState.voiceUserSpeakingTimeoutId);
+    appState.voiceUserSpeakingTimeoutId = null;
+  }
+  if (appState.voiceIngredientHighlightTimeoutId) {
+    window.clearTimeout(appState.voiceIngredientHighlightTimeoutId);
+    appState.voiceIngredientHighlightTimeoutId = null;
+  }
+
+  resetTimerEngine();
   clearTimerMessageLater();
-  stopMinimalVoiceController();
   clearDeferredPreparationSpeech();
   clearDeferredCookingStepInitialization();
   clearMinimalVoiceTranscriptState();
   resetVoiceActivityState();
+  cancelSpeechOutput(reason);
+  resetVoiceEngineInstances(reason);
+  clearOnboardingDemoLoop();
 
   appState.ingredientChecks = preserveRecipe && currentRecipe
     ? (Array.isArray(currentRecipe.ingredients) ? currentRecipe.ingredients.map(() => false) : [])
@@ -2760,9 +2784,39 @@ function resetRecipeRuntimeState(options = {}) {
   appState.voicePreparationAcceptCommandsAt = 0;
   appState.voiceCommandLockUntil = 0;
   appState.voiceCommandLockReason = "";
+  appState.voiceErrorMessage = "";
+  appState.voiceUserSpeaking = false;
+  appState.voiceOutputSpeaking = false;
+  appState.voiceHintMessage = "";
+  appState.voiceIngredientHighlightIndex = null;
   setVoiceCommandStatus("", 0);
   setTimerStatus("idle", reason);
   updateTimerOverlay();
+  recordVoiceDebugEvent("timer-reset-complete", {
+    reason,
+    timerStatus: appState.timerStatus,
+    activeTimerSeconds: appState.activeTimerSeconds
+  });
+  recordVoiceDebugEvent("render-guard-reset", {
+    reason,
+    cookingRenderInProgress: appState.cookingRenderInProgress,
+    cookingRenderQueued: appState.cookingRenderQueued,
+    cookingEntryInitializationPending: appState.cookingEntryInitializationPending
+  });
+  recordVoiceDebugEvent("listener-count-check", {
+    reason,
+    globalWindowListeners: 3,
+    domListenersRecreatedPerRender: true,
+    voiceEngineReused: false
+  });
+  recordVoiceDebugEvent("runtime-reset-complete", {
+    reason,
+    preserveRecipe,
+    voiceListening: appState.voiceListening,
+    voiceOutputSpeaking: appState.voiceOutputSpeaking,
+    cookingRenderInProgress: appState.cookingRenderInProgress,
+    cookingRenderQueued: appState.cookingRenderQueued
+  });
 }
 
 function clearDeferredCookingStepInitialization() {
@@ -2770,6 +2824,81 @@ function clearDeferredCookingStepInitialization() {
     window.clearTimeout(appState.cookingInitDeferredTimeoutId);
     appState.cookingInitDeferredTimeoutId = null;
   }
+}
+
+function cancelSpeechOutput(reason = "runtime-reset") {
+  const canCancelSpeech = "speechSynthesis" in window && typeof window.speechSynthesis.cancel === "function";
+  if (!canCancelSpeech) {
+    recordVoiceDebugEvent("speech-cancelled", {
+      reason,
+      supported: false
+    });
+    return;
+  }
+
+  try {
+    window.speechSynthesis.cancel();
+    window.dispatchEvent(new CustomEvent("kitchenpilot:voice-speech-end"));
+    recordVoiceDebugEvent("speech-cancelled", {
+      reason,
+      supported: true
+    });
+  } catch (error) {
+    recordVoiceDebugEvent("speech-cancelled", {
+      reason,
+      supported: true,
+      message: error instanceof Error ? error.message : String(error || "speech cancel failed")
+    });
+  }
+}
+
+function resetVoiceEngineInstances(reason = "runtime-reset") {
+  const voiceEngineReused = Boolean(voiceRecognition || minimalVoiceRecognition);
+
+  if (minimalVoiceRecognition) {
+    try {
+      minimalVoiceRecognition.onstart = null;
+      minimalVoiceRecognition.onresult = null;
+      minimalVoiceRecognition.onspeechstart = null;
+      minimalVoiceRecognition.onspeechend = null;
+      minimalVoiceRecognition.onend = null;
+      minimalVoiceRecognition.onerror = null;
+      minimalVoiceRecognition.abort();
+    } catch {
+      // Ignore reset errors while tearing down recognition.
+    }
+    minimalVoiceRecognition = null;
+  }
+
+  if (voiceRecognition) {
+    try {
+      voiceRecognition.onresult = null;
+      voiceRecognition.onstart = null;
+      voiceRecognition.onspeechstart = null;
+      voiceRecognition.onspeechend = null;
+      voiceRecognition.onend = null;
+      voiceRecognition.onerror = null;
+      voiceRecognition.abort?.();
+      voiceRecognition.stop();
+    } catch {
+      // Ignore reset errors while tearing down recognition.
+    }
+    voiceRecognition = null;
+  }
+
+  appState.voiceListening = false;
+  appState.voiceRecognitionSessionId = 0;
+  lastVoiceHandledCommand = {
+    key: "",
+    transcript: "",
+    at: 0
+  };
+
+  recordVoiceDebugEvent("voice-engine-reset", {
+    reason,
+    voiceEngineReused,
+    voiceEngineRecreated: true
+  });
 }
 
 function clearHomeRecipeInputState() {

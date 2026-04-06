@@ -76,6 +76,13 @@ function stopTimer() {
   setStatus("idle", "stopTimer");
 }
 
+function resetTimerEngine() {
+  stopTimer();
+  onTick = null;
+  onDone = null;
+  setStatus("idle", "resetTimerEngine");
+}
+
 function getTimerState() {
   return {
     remainingSeconds,
