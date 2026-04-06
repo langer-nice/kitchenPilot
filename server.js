@@ -25,6 +25,11 @@ const MIME_TYPES = {
   ".ico": "image/x-icon"
 };
 
+function hasOpenAiApiKey() {
+  const rawKey = process.env.OPENAI_API_KEY;
+  return typeof rawKey === "string" && rawKey.trim().length > 0;
+}
+
 function sendJson(res, statusCode, payload) {
   res.statusCode = statusCode;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -147,5 +152,5 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`KitchenPilot server running at http://localhost:${PORT}`);
-  console.log("Set OPENAI_API_KEY before starting to enable AI recipe parsing.");
+  console.log(hasOpenAiApiKey() ? "OPENAI_API_KEY detected. AI recipe parsing enabled." : "OPENAI_API_KEY missing. Falling back to deterministic recipe parsing.");
 });

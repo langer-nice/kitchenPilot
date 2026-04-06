@@ -6,6 +6,8 @@ https://vercel.com/david-lang/kitchen-pilot
 Open AI - API Keys : 
 https://platform.openai.com/api-keys
 
+npx playwright test    
+
 
 Ingredients 
 1 tbsp any vinegar or lemon juice (my favourite is cider vinegar) (Note 1)
@@ -25,8 +27,11 @@ Serve on a plate
 
 
 
+
+
+
 unset OPENAI_API_KEY
-export OPENAI_API_KEY="sk-...YOUR_NEW_REAL_KEY..."
+export OPENAI_API_KEY="sk-xxxx"
  
 echo "$OPENAI_API_KEY" | cut -c1-12 
 

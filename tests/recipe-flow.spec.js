@@ -1,5 +1,10 @@
 const { test, expect } = require("@playwright/test");
-const { SIMPLE_PASTED_RECIPE, TIMER_PASTED_RECIPE } = require("./fixtures/recipes");
+const {
+  SIMPLE_PASTED_RECIPE,
+  SIMPLE_PARSED_RECIPE,
+  TIMER_PASTED_RECIPE,
+  TIMER_PARSED_RECIPE
+} = require("./fixtures/recipes");
 const {
   completeRecipeViaTapFlow,
   expectNoFailureState,
@@ -9,7 +14,7 @@ const {
 
 test.describe("KitchenPilot tap-only recipe regression flow", () => {
   test("simple pasted recipe completes", async ({ page }) => {
-    await startRecipeFromPastedText(page, SIMPLE_PASTED_RECIPE);
+    await startRecipeFromPastedText(page, SIMPLE_PASTED_RECIPE, SIMPLE_PARSED_RECIPE);
     await completeRecipeViaTapFlow(page);
 
     await waitForScreen(page, "completed");
@@ -17,7 +22,7 @@ test.describe("KitchenPilot tap-only recipe regression flow", () => {
   });
 
   test("timer recipe completes", async ({ page }) => {
-    await startRecipeFromPastedText(page, TIMER_PASTED_RECIPE);
+    await startRecipeFromPastedText(page, TIMER_PASTED_RECIPE, TIMER_PARSED_RECIPE);
     await completeRecipeViaTapFlow(page);
 
     await waitForScreen(page, "completed");
@@ -25,7 +30,7 @@ test.describe("KitchenPilot tap-only recipe regression flow", () => {
   });
 
   test("recook works for the same recipe", async ({ page }) => {
-    await startRecipeFromPastedText(page, SIMPLE_PASTED_RECIPE);
+    await startRecipeFromPastedText(page, SIMPLE_PASTED_RECIPE, SIMPLE_PARSED_RECIPE);
     await completeRecipeViaTapFlow(page);
     await waitForScreen(page, "completed");
 
@@ -38,7 +43,7 @@ test.describe("KitchenPilot tap-only recipe regression flow", () => {
   });
 
   test("back to home resets input state", async ({ page }) => {
-    await startRecipeFromPastedText(page, SIMPLE_PASTED_RECIPE);
+    await startRecipeFromPastedText(page, SIMPLE_PASTED_RECIPE, SIMPLE_PARSED_RECIPE);
     await completeRecipeViaTapFlow(page);
     await waitForScreen(page, "completed");
 

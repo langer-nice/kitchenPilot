@@ -50,7 +50,18 @@ async function gotoHome(page) {
   await waitForScreen(page, "home");
 }
 
-async function startRecipeFromPastedText(page, recipeText) {
+async function mockRecipeParse(page, parsedRecipe) {
+  await page.route("**/api/parse-recipe", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(parsedRecipe)
+    });
+  });
+}
+
+async function startRecipeFromPastedText(page, recipeText, parsedRecipe) {
+  await mockRecipeParse(page, parsedRecipe);
   await gotoHome(page);
   await page.locator('[aria-label="Paste recipe text"]').click();
   await page.locator("#recipeText").fill(recipeText);
@@ -154,6 +165,7 @@ module.exports = {
   expectNoFailureState,
   getUiSnapshot,
   gotoHome,
+  mockRecipeParse,
   startRecipeFromPastedText,
   waitForScreen
 };

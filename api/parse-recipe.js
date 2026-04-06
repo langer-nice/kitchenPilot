@@ -1,6 +1,18 @@
 const OPENAI_API_URL = "https://api.openai.com/v1/responses";
 const REMOTE_FETCH_USER_AGENT = "KitchenPilot/1.0 (+https://localhost)";
 
+function getOpenAiApiKey() {
+  const rawKey = process.env.OPENAI_API_KEY;
+  if (typeof rawKey !== "string") {
+    return "";
+  }
+  return rawKey.trim();
+}
+
+function hasOpenAiApiKey() {
+  return Boolean(getOpenAiApiKey());
+}
+
 function setCorsHeaders(res) {
   if (!res || typeof res.setHeader !== "function") {
     return;
@@ -904,7 +916,7 @@ function deterministicParseRecipeText(recipeText) {
 }
 
 async function parseWithOpenAI(recipeText) {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = getOpenAiApiKey();
 
   if (!apiKey) {
     throw createApiError("Missing OPENAI_API_KEY environment variable", 503, "missing_api_key");
@@ -1015,11 +1027,20 @@ async function handler(req, res) {
       });
     }
 
+    const openAiKeyPresent = hasOpenAiApiKey();
     const deterministicRecipe = deterministicParseRecipeText(recipeSourceText);
-    const parsedRecipe = deterministicRecipe || await parseWithOpenAI(recipeSourceText);
+    const parsedRecipe = openAiKeyPresent
+      ? await parseWithOpenAI(recipeSourceText)
+      : deterministicRecipe;
+
+    if (!parsedRecipe) {
+      throw createApiError("Missing OPENAI_API_KEY environment variable", 503, "missing_api_key");
+    }
+
     const finalRecipe = mergeRecipeMetadata(parsedRecipe, extractedMetadata);
     console.log("[api/parse-recipe] Final structured recipe", {
-      parserStrategy: deterministicRecipe ? "deterministic_plain_text" : "openai",
+      parserStrategy: openAiKeyPresent ? "openai" : "deterministic_plain_text",
+      openAiKeyPresent,
       title: finalRecipe.title,
       preparationSteps: finalRecipe.preparationSteps,
       cookingSteps: finalRecipe.cookingSteps,
