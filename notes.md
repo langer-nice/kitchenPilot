@@ -13,8 +13,11 @@ Ingredients
 1/2 tsp Dijon Mustard (or other non spicy smooth mustard)
 1/2 tsp EACH salt and pepper
 
+Preparation
+Juice the lemon 
+
 Instructions
-Mix ingredients together 
+Mix ingredients together & Stir for 10 seconds
 Season with salt and pepper
 
 
